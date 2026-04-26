@@ -34,6 +34,29 @@ Pick **1**, **5**, or **20** tracks, download the newest matching Suno songs as 
 4. Keep the Suno tab open while the extension fetches and downloads tracks.
 5. After download, highlighted cards show which tracks were saved successfully.
 
+## Optional Converter Tool
+
+This repository also includes `tools/suno_downloads_to_music.py`, a standalone helper for organizing downloaded Suno files after the browser extension saves them.
+
+It scans your Downloads folder for MP3/WAV files plus matching sidecars such as:
+
+```text
+Song Title.wav
+Song Title_cover.jpeg
+Song Title.txt
+```
+
+MP3 files are copied into your Music folder with tags, cover art, and lyrics. WAV files are converted to FLAC with tags, cover art, and lyrics. Existing destination files with the same name are overwritten.
+
+Example:
+
+```powershell
+python tools\suno_downloads_to_music.py --dry-run
+python tools\suno_downloads_to_music.py
+```
+
+The tool is local-only and does not contact any external service. It expects `ffmpeg`, `flac`, and `metaflac` to be installed locally.
+
 ## Why 20 sometimes needs extra logic
 
 Suno's UI can virtualize the feed: the API may return 20 songs, but the page may only render about 16 cards in the DOM at first. This extension scrolls the feed container and repeats the matching pass, so the remaining cards can render and be highlighted too.
