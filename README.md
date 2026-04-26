@@ -34,9 +34,11 @@ Pick **1**, **5**, or **20** tracks, download the newest matching Suno songs as 
 4. Keep the Suno tab open while the extension fetches and downloads tracks.
 5. After download, highlighted cards show which tracks were saved successfully.
 
-## Optional Converter Tool
+## Companion Converter Tool
 
-This repository also includes `tools/suno_downloads_to_music.py`, a standalone helper for organizing downloaded Suno files after the browser extension saves them.
+This repository also includes `tools/suno_downloads_to_music.py`, a handy companion to the extension. The extension is good at getting the files out of Suno quickly; this script is good at turning that batch into a clean local music library.
+
+Use it after downloading tracks with the extension when you want the audio, cover, and lyrics folded into properly tagged files instead of keeping loose sidecars in Downloads.
 
 It scans your Downloads folder for MP3/WAV files plus matching sidecars such as:
 
@@ -46,7 +48,7 @@ Song Title_cover.jpeg
 Song Title.txt
 ```
 
-MP3 files are copied into your Music folder with tags, cover art, and lyrics. WAV files are converted to FLAC with tags, cover art, and lyrics. Existing destination files with the same name are overwritten.
+MP3 files are copied into your Music folder with tags, cover art, and lyrics. WAV files are converted to FLAC with tags, cover art, and lyrics. Existing destination files with the same name are overwritten, which is useful when track names are intentional and should not be changed with `_1` suffixes.
 
 Example:
 
@@ -56,6 +58,13 @@ python tools\suno_downloads_to_music.py
 ```
 
 The tool is local-only and does not contact any external service. It expects `ffmpeg`, `flac`, and `metaflac` to be installed locally.
+
+By default, the tool uses `%USERPROFILE%\Downloads`, `%USERPROFILE%\Music`, and resolves `ffmpeg`, `flac`, and `metaflac` from PATH. You can override paths with CLI flags or environment variables:
+
+```powershell
+python tools\suno_downloads_to_music.py --src "D:\Downloads" --dst "D:\Music"
+setx SUNO_CONVERT_FFMPEG "C:\tools\ffmpeg\bin\ffmpeg.exe"
+```
 
 ## Why 20 sometimes needs extra logic
 

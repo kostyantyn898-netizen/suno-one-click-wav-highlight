@@ -23,6 +23,8 @@ Useful flags:
   python tools/suno_downloads_to_music.py --keep-source
   python tools/suno_downloads_to_music.py --src "%USERPROFILE%\\Downloads" --dst "%USERPROFILE%\\Music"
 
+By default, `ffmpeg`, `flac`, and `metaflac` are resolved from PATH.
+
 Windows env overrides:
   SUNO_CONVERT_FFMPEG, SUNO_CONVERT_FLAC, SUNO_CONVERT_METAFLAC,
   SUNO_CONVERT_DOWNLOADS, SUNO_CONVERT_MUSIC
@@ -40,9 +42,9 @@ import tempfile
 from pathlib import Path
 from typing import Iterable
 
-DEFAULT_FFMPEG = r"c:\ffmpeg-8.0-full_build\bin\ffmpeg.exe"
-DEFAULT_FLAC = r"c:\flac-1.4.2-win\Win64\flac.exe"
-DEFAULT_METAFLAC = r"c:\flac-1.4.2-win\Win64\metaflac.exe"
+DEFAULT_FFMPEG = "ffmpeg"
+DEFAULT_FLAC = "flac"
+DEFAULT_METAFLAC = "metaflac"
 DEFAULT_DOWNLOADS = r"%USERPROFILE%\Downloads"
 DEFAULT_MUSIC = r"%USERPROFILE%\Music"
 
@@ -250,6 +252,13 @@ def output_path(dst_dir: str, filename: str) -> str:
     return os.path.join(dst_dir, filename)
 
 
+def command_available(command: str) -> bool:
+    if os.path.isabs(command) or os.path.dirname(command):
+        return os.path.isfile(command)
+    from shutil import which
+    return which(command) is not None
+
+
 def process_mp3(src_mp3: str, index: int, total: int, args: argparse.Namespace) -> tuple[bool, str | None]:
     src_dir = os.path.dirname(src_mp3)
     mp3_name = os.path.basename(src_mp3)
@@ -441,15 +450,18 @@ def main(argv: list[str]) -> int:
             print(f"  ... {total - 80} more")
         return 0
 
-    if mp3s and not os.path.isfile(args.ffmpeg):
+    if mp3s and not command_available(args.ffmpeg):
         print(f"\nffmpeg not found: {args.ffmpeg}")
+        print("Install ffmpeg, add it to PATH, or pass --ffmpeg / set SUNO_CONVERT_FFMPEG.")
         return 1
     if wavs:
-        if not os.path.isfile(args.flac):
+        if not command_available(args.flac):
             print(f"\nflac not found: {args.flac}")
+            print("Install FLAC tools, add them to PATH, or pass --flac / set SUNO_CONVERT_FLAC.")
             return 1
-        if not os.path.isfile(args.metaflac):
+        if not command_available(args.metaflac):
             print(f"\nmetaflac not found: {args.metaflac}")
+            print("Install FLAC tools, add them to PATH, or pass --metaflac / set SUNO_CONVERT_METAFLAC.")
             return 1
 
     need_mutagen = any(os.path.isfile(path[:-4] + ".txt") for path in mp3s)
