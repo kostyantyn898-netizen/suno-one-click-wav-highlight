@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Suno One-Click WAV + Highlight",
+  "short_name": "Suno WAV",
+  "description": "Download your latest Suno tracks as WAV with lyrics and covers, then highlight downloaded cards for cleanup.",
+  "version": "1.3.1",
+  "homepage_url": "https://github.com/kostyantyn898-netizen/suno-one-click-wav-highlight",
+  "action": {
+    "default_icon": "SunoDownloader.png",
+    "default_popup": "popup.html",
+    "default_title": "Suno One-Click WAV + Highlight"
+  },
+  "icons": {
+    "128": "SunoDownloader_128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "*://*.suno.com/*",
+    "https://studio-api.prod.suno.com/*",
+    "https://studio-api-prod.suno.com/*",
+    "https://cdn1.suno.ai/*",
+    "https://cdn2.suno.ai/*"
+  ],
+  "permissions": [
+    "downloads",
+    "scripting",
+    "activeTab",
+    "storage"
+  ]
+}
