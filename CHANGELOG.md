@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 - Safer visible-range selection
+
+- Changed batch buttons to 1 / 6 / 16 for a safer visible-range workflow.
+- Added automatic Shift-click selection for downloaded cards when the visible batch can be selected safely.
+- Kept neon highlight as fallback when Suno selection does not react or virtual scrolling is involved.
+- Limited feed fetching to one page to reduce unnecessary requests and avoid risky 20-track virtualized-list selection.
+
 ## 1.3.1 - Reliability hardening
 
 - Reset fetch/download state on early token, tab, and setup failures.
@@ -20,3 +27,6 @@
 
 - Added 1 / 5 / 20 batch buttons.
 - Added WAV download, lyrics, covers, popup progress, and Suno card highlight.
+
+
+

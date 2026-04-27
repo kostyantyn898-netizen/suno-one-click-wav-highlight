@@ -1,5 +1,5 @@
 // popup.js - Suno One-Click WAV + Highlight
-// Натиснув на 1/5/20 -> fresh fetch -> N пісень -> качає WAV+lyrics+image
+// Натиснув на 1/6/16 -> fresh fetch -> N пісень -> качає WAV+lyrics+image
 // Підсвічує статус кожного треку у списку (ok / fail).
 // Highlight на сторінці suno.com -- автоматично через background після завершення.
 // Popup НЕ закривається сам.
@@ -10,12 +10,11 @@ const api = (typeof browser !== 'undefined') ? browser : chrome;
 const FOLDER = 'Suno_Songs';
 const DOWNLOAD_STATE_KEY = 'sunoDownloadState';
 const LAST_BATCH_KEY = 'sunoOneClickLastBatch';
-// BATCH_SIZE визначається кнопкою (1 / 5 / 20).
+// BATCH_SIZE визначається кнопкою (1 / 6 / 16).
 const FORMAT = 'wav';
 // Кількість сторінок feed/v3 під обраний batchSize.
-// Один запит сервера повертає ~16 пісень (limit=20, але після фільтрів зазвичай менше),
-// тому для batchSize > 16 беремо 2 сторінки.
-function pagesFor(batchSize) { return batchSize > 16 ? 2 : 1; }
+// Безпечна політика: максимум 16 треків, одна сторінка, без virtual-scroll range select.
+function pagesFor(batchSize) { return 1; }
 const PUBLIC_ONLY = false;
 
 // Стан popup'а в пам'яті (не зберігається).
@@ -243,3 +242,5 @@ document.addEventListener('DOMContentLoaded', () => {
         start(n);
     }));
 });
+
+

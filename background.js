@@ -271,6 +271,7 @@ async function highlightSongsOnSuno(batchSongs) {
             ensureStyle();
 
             const highlighted = [];
+            let usedVirtualScroll = false;
             const used = new Set();
             const remaining = new Set(songs.map((_, i) => i));
 
@@ -304,11 +305,74 @@ async function highlightSongsOnSuno(batchSongs) {
                 return document.scrollingElement || document.documentElement;
             }
 
+            function getDomOrderedCards(cards) {
+                return Array.from(new Set(cards.filter(Boolean))).sort((a, b) => {
+                    if (a === b) return 0;
+                    const pos = a.compareDocumentPosition(b);
+                    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+                    if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+                    return 0;
+                });
+            }
+
+            function clickLikeUser(el, shiftKey) {
+                if (!el) return false;
+                try { el.scrollIntoView({ behavior: 'auto', block: 'center' }); } catch (e) {}
+                const rect = el.getBoundingClientRect?.();
+                if (!rect || rect.width < 1 || rect.height < 1) return false;
+
+                // HAR/RUM data shows manual Shift-click is reported as a click on the track title/card,
+                // not as a checkbox API action. Click near the readable row body so React sees the same target.
+                const x = Math.max(1, Math.min(window.innerWidth - 2, rect.left + Math.min(Math.max(120, rect.width * 0.45), rect.width - 16)));
+                const y = Math.max(1, Math.min(window.innerHeight - 2, rect.top + rect.height / 2));
+                const target = document.elementFromPoint(x, y) || el;
+                const eventInit = {
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true,
+                    view: window,
+                    button: 0,
+                    buttons: 1,
+                    clientX: x,
+                    clientY: y,
+                    shiftKey: !!shiftKey
+                };
+
+                for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+                    const EventCtor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+                    target.dispatchEvent(new EventCtor(type, eventInit));
+                }
+                return true;
+            }
+
+            async function tryShiftSelectRange(cards) {
+                const ordered = getDomOrderedCards(cards);
+                if (!ordered.length) return { attempted: false, selected: 0, error: 'no_cards' };
+
+                const first = ordered[0];
+                const last = ordered[ordered.length - 1];
+                try {
+                    const firstClicked = clickLikeUser(first, true);
+                    await new Promise(r => setTimeout(r, 160));
+                    const lastClicked = first === last ? firstClicked : clickLikeUser(last, true);
+                    await new Promise(r => setTimeout(r, 160));
+                    return {
+                        attempted: true,
+                        selected: firstClicked && lastClicked ? ordered.length : 0,
+                        firstClicked,
+                        lastClicked
+                    };
+                } catch (e) {
+                    return { attempted: true, selected: 0, error: e?.message || String(e) };
+                }
+            }
+
             // Перший прохід -- те, що видно зараз.
             tryRound();
 
             // Якщо лишились незнайдені -- скролимо контейнер списку і повторюємо.
             if (remaining.size > 0) {
+                usedVirtualScroll = true;
                 const scrollEl = findScrollContainer();
                 let lastTop = -1;
                 for (let attempt = 0; attempt < 14 && remaining.size > 0; attempt++) {
@@ -326,22 +390,30 @@ async function highlightSongsOnSuno(batchSongs) {
                 try { scrollEl.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
             }
 
+            const canShiftSelect = songs.length <= 16 && !usedVirtualScroll;
+            const selection = canShiftSelect
+                ? await tryShiftSelectRange(highlighted)
+                : { attempted: false, selected: 0, error: usedVirtualScroll ? 'virtual_scroll_skip' : 'batch_too_large' };
+
             const toast = document.createElement('div');
             toast.id = 'suno-oneclick-toast';
             const titles = songs.map(s => '• ' + (s.title || s.id || 'untitled')).join('<br>');
             toast.innerHTML = highlighted.length
-                ? '<b>Suno One-Click:</b> marked ' + highlighted.length + ' downloaded card(s) for trash.<br><br>' + titles
+                ? '<b>Suno One-Click:</b> marked ' + highlighted.length + ' downloaded card(s) for trash.'
+                    + (selection.selected ? '<br><b>Experiment:</b> shift-clicked ' + selection.selected + ' card(s).' : (!canShiftSelect && usedVirtualScroll ? '<br><b>Experiment:</b> skipped shift-select after virtual scroll.' : (!canShiftSelect ? '<br><b>Experiment:</b> skipped shift-select for large batch.' : '<br><b>Experiment:</b> shift-select fallback only.')))
+                    + '<br><br>' + titles
                 : '<b>Suno One-Click:</b> last batch saved, but visible cards were not found.<br>Open the Suno list that contains them.<br><br>' + titles;
             document.body.appendChild(toast);
             setTimeout(() => { try { toast.remove(); } catch (e) {} }, 16000);
 
             if (highlighted[0]) highlighted[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-            return { highlighted: highlighted.length };
+            return { highlighted: highlighted.length, selected: selection.selected || 0, selection };
         },
         args: [songs]
     });
 
-    return { ok: true, highlighted: results?.[0]?.result?.highlighted || 0 };
+    const result = results?.[0]?.result || {};
+    return { ok: true, highlighted: result.highlighted || 0, selected: result.selected || 0, selection: result.selection || null };
 }
 
 
@@ -1401,7 +1473,9 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
     if (!stopped && lastBatchSongs.length) {
         try {
             const result = await highlightSongsOnSuno(lastBatchSongs);
-            if (result?.highlighted) {
+            if (result?.selected) {
+                logToPopup(`✅ Shift-selected ${result.selected} downloaded card(s) on Suno.`);
+            } else if (result?.highlighted) {
                 logToPopup(`✨ Highlighted ${result.highlighted} downloaded card(s) on Suno.`);
             } else {
                 logToPopup('ℹ️ Batch saved. Open the Suno list and press Highlight last batch if the cards are not visible.');
@@ -1417,3 +1491,10 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
 function logToPopup(text) {
     try { api.runtime.sendMessage({ action: "log", text: text }); } catch (e) {}
 }
+
+
+
+
+
+
+

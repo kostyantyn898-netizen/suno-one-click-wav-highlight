@@ -2,13 +2,13 @@
 
 A small Chrome / Chromium extension for people who generate a lot of music in Suno and want a fast cleanup workflow.
 
-Pick **1**, **5**, or **20** tracks, download the newest matching Suno songs as **WAV**, save lyrics and cover art, then visually highlight the downloaded cards on `suno.com` so you can manually trash or organize them.
+Pick **1**, **6**, or **16** tracks, download the newest matching Suno songs as **WAV**, save lyrics and cover art, then select/highlight the downloaded cards on `suno.com` so you can manually trash or organize them.
 
 > This is an unofficial community tool. It is not affiliated with Suno.
 
 ## Features
 
-- One-click batch buttons: **1 / 5 / 20**.
+- One-click batch buttons: **1 / 6 / 16**.
 - Downloads WAV files into `Downloads/Suno_Songs/`.
 - Saves lyrics as `.txt` when available.
 - Saves cover images when available.
@@ -30,7 +30,7 @@ Pick **1**, **5**, or **20** tracks, download the newest matching Suno songs as 
 
 1. Open your Suno library/feed page.
 2. Click the extension icon.
-3. Choose **1**, **5**, or **20**.
+3. Choose **1**, **6**, or **16**.
 4. Keep the Suno tab open while the extension fetches and downloads tracks.
 5. After download, highlighted cards show which tracks were saved successfully.
 
@@ -66,9 +66,9 @@ python tools\suno_downloads_to_music.py --src "D:\Downloads" --dst "D:\Music"
 setx SUNO_CONVERT_FFMPEG "C:\tools\ffmpeg\bin\ffmpeg.exe"
 ```
 
-## Why 20 sometimes needs extra logic
+## Why the maximum batch is 16
 
-Suno's UI can virtualize the feed: the API may return 20 songs, but the page may only render about 16 cards in the DOM at first. This extension scrolls the feed container and repeats the matching pass, so the remaining cards can render and be highlighted too.
+Suno's UI virtualizes the feed. In practice, about 16 cards can be handled without forcing a risky scroll/search pass, so this build caps the one-click batch at 16. Smaller batches are friendlier to Suno, easier to verify visually, and safer for Shift-click range selection.
 
 ## Permissions
 
@@ -97,7 +97,7 @@ See [PRIVACY.md](PRIVACY.md) for the short privacy policy.
 ## Known limitations
 
 - Suno may change private API endpoints at any time.
-- WAV conversion can take time, especially for 20-track batches.
+- WAV conversion can take time, especially for 16-track batches.
 - Highlighting depends on the current Suno UI and visible feed/list page.
 - The extension highlights cards for manual cleanup; it does **not** auto-delete or auto-trash tracks.
 
@@ -108,3 +108,4 @@ See [CHANGELOG.md](CHANGELOG.md).
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
