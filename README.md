@@ -2,6 +2,8 @@
 
 A small Chrome / Chromium extension for people who generate a lot of music in Suno and want a fast cleanup workflow.
 
+**Download:** [Latest release](https://github.com/kostyantyn898-netizen/suno-one-click-wav-highlight/releases/latest)
+
 Pick **1**, **6**, or **16** tracks, download the newest matching Suno songs as **WAV**, save lyrics and cover art, then select/highlight the downloaded cards on `suno.com` so you can manually trash or organize them. AUTO mode can keep going one track at a time, with a visible counter, until you press STOP.
 
 > This is an unofficial community tool. It is not affiliated with Suno.
