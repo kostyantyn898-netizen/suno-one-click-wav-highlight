@@ -1,30 +1,25 @@
-// popup.js - Suno One-Click WAV + Highlight
-// Натиснув на 1/6/16 -> fresh fetch -> N пісень -> качає WAV+lyrics+image
-// Підсвічує статус кожного треку у списку (ok / fail).
-// Highlight на сторінці suno.com -- автоматично через background після завершення.
-// Popup НЕ закривається сам.
-
+// popup.js - Suno WAV Auto Marker Local
 const api = (typeof browser !== 'undefined') ? browser : chrome;
 
-// Конфіг (без UI, без storage).
 const FOLDER = 'Suno_Songs';
 const DOWNLOAD_STATE_KEY = 'sunoDownloadState';
 const LAST_BATCH_KEY = 'sunoOneClickLastBatch';
-// BATCH_SIZE визначається кнопкою (1 / 6 / 16).
 const FORMAT = 'wav';
-// Кількість сторінок feed/v3 під обраний batchSize.
-// Безпечна політика: максимум 16 треків, одна сторінка, без virtual-scroll range select.
-function pagesFor(batchSize) { return 1; }
 const PUBLIC_ONLY = false;
 
-// Стан popup'а в пам'яті (не зберігається).
-let stage = 'idle'; // idle | fetching | downloading | done | error
-let trackOrder = []; // [id, id, ...] у порядку рендеру
-let trackById = {};  // id -> { title, status, error }
-let currentBatch = 0; // обраний користувачем розмір батча
+function pagesFor(batchSize) { return 1; }
+
+let stage = 'idle'; // idle | fetching | downloading | auto | done | error
+let trackOrder = [];
+let trackById = {};
+let currentBatch = 0;
+let autoMarkedCount = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
-    const goBtns = document.querySelectorAll('.go-btn');
+    const goBtns = document.querySelectorAll('.go-btn[data-count]');
+    const autoStartBtn = document.getElementById('autoStartBtn');
+    const autoStopBtn = document.getElementById('autoStopBtn');
+    const autoCounterDiv = document.getElementById('autoCounter');
     const tracksDiv = document.getElementById('tracks');
     const summaryDiv = document.getElementById('summary');
     const statusDiv = document.getElementById('status');
@@ -37,15 +32,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function logStatus(text) {
         statusDiv.innerText = text + '\n' + statusDiv.innerText;
-        console.log('[suno-1c]', text);
+        console.log('[suno-auto-marker]', text);
     }
 
-    function setBusy(busy) { goBtns.forEach(b => b.disabled = busy); }
+    function setManualBusy(busy) {
+        goBtns.forEach(b => b.disabled = busy);
+        if (autoStartBtn) autoStartBtn.disabled = busy;
+        if (autoStopBtn && stage !== 'auto') autoStopBtn.disabled = true;
+    }
+
+    function setAutoRunning(running, stopping) {
+        if (running) stage = 'auto';
+        else if (stage === 'auto') stage = stopping ? 'auto' : 'done';
+
+        goBtns.forEach(b => b.disabled = running || !!stopping);
+        if (autoStartBtn) autoStartBtn.disabled = running || !!stopping;
+        if (autoStopBtn) autoStopBtn.disabled = !running && !stopping;
+    }
 
     function clearSummary() {
         summaryDiv.className = '';
         summaryDiv.textContent = '';
         summaryDiv.style.display = 'none';
+    }
+
+    function updateAutoCounter(count, title) {
+        autoMarkedCount = count || 0;
+        if (!autoCounterDiv) return;
+        autoCounterDiv.style.display = 'block';
+        autoCounterDiv.textContent = 'AUTO // ' + autoMarkedCount + ' MARKED' + (title ? ' // ' + title : '');
+    }
+
+    function hideAutoCounter() {
+        autoMarkedCount = 0;
+        if (!autoCounterDiv) return;
+        autoCounterDiv.textContent = 'AUTO // 0 MARKED';
+        autoCounterDiv.style.display = 'none';
     }
 
     function showSummary(kind, text) {
@@ -67,9 +89,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderTracks(tracks) {
         clearTracks();
         if (!Array.isArray(tracks) || tracks.length === 0) return;
+
         tracks.forEach(t => {
             trackOrder.push(t.id);
             trackById[t.id] = { title: t.title || t.id, status: 'pending', error: null };
+
             const row = document.createElement('div');
             row.className = 'track';
             row.dataset.id = t.id;
@@ -87,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             tracksDiv.appendChild(row);
         });
+
         tracksDiv.classList.add('visible');
     }
 
@@ -99,27 +124,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (error !== undefined) trackById[id].error = error;
         }
         if (error) {
-            row.title = (trackById[id] && trackById[id].title ? trackById[id].title : id) + ' -- ' + error;
+            row.title = (trackById[id]?.title || id) + ' -- ' + error;
         }
     }
 
-    function finalizeSummary() {
+    function finalizeSummary(prefix) {
         if (trackOrder.length === 0) return;
         let ok = 0, fail = 0, pending = 0;
         for (const id of trackOrder) {
-            const s = trackById[id] && trackById[id].status;
+            const s = trackById[id]?.status;
             if (s === 'ok') ok++;
             else if (s === 'fail') fail++;
             else pending++;
         }
+
         if (fail === 0 && pending === 0 && ok === trackOrder.length) {
-            showSummary('success', 'OK // ' + ok + '/' + trackOrder.length + ' WAV ready');
+            showSummary('success', (prefix || 'OK') + ' // ' + ok + '/' + trackOrder.length);
         } else if (ok > 0 && fail > 0) {
-            showSummary('partial', 'PARTIAL // ' + ok + ' ok, ' + fail + ' fail of ' + trackOrder.length);
+            showSummary('partial', (prefix || 'PARTIAL') + ' // ' + ok + ' ok, ' + fail + ' fail');
         } else if (ok === 0 && fail > 0) {
-            showSummary('fail', 'FAIL // 0/' + trackOrder.length + ' WAV (' + fail + ' failed)');
+            showSummary('fail', (prefix || 'FAIL') + ' // ' + fail + ' failed');
         } else {
-            showSummary('partial', 'STOPPED // ' + ok + ' ok, ' + fail + ' fail, ' + pending + ' pending');
+            showSummary('partial', (prefix || 'STOPPED') + ' // ' + ok + ' ok, ' + fail + ' fail, ' + pending + ' pending');
         }
     }
 
@@ -131,14 +157,57 @@ document.addEventListener('DOMContentLoaded', () => {
         try { await api.storage.local.remove([DOWNLOAD_STATE_KEY, LAST_BATCH_KEY]); } catch (e) { /* ignore */ }
     }
 
-    async function start(batchSize) {
-        currentBatch = batchSize;
-        if (stage === 'fetching' || stage === 'downloading') {
-            console.log('[suno-1c] start ignored, stage=', stage);
-            return;
+    async function startAuto() {
+        if (stage === 'fetching' || stage === 'downloading' || stage === 'auto') return;
+        stage = 'auto';
+        clearSummary();
+        clearTracks();
+        statusDiv.innerText = '';
+        updateAutoCounter(0);
+        setAutoRunning(true, false);
+        logStatus('Auto marker started: 1 track, then 5s pause.');
+        logStatus('Do not scroll the Suno page while AUTO runs.');
+        await clearRunState();
+
+        try {
+            api.runtime.sendMessage({
+                action: 'auto_trash_start',
+                folderName: FOLDER,
+                downloadOptions: { music: true, lyrics: true, image: true }
+            }, (response) => {
+                const err = api.runtime.lastError;
+                if (err) {
+                    logStatus('Background error: ' + err.message);
+                    setAutoRunning(false, false);
+                    showSummary('fail', 'FAIL // background error');
+                    return;
+                }
+                logStatus(response?.ok ? 'Background accepted auto mode.' : 'Background did not confirm auto mode.');
+            });
+        } catch (e) {
+            stage = 'error';
+            setAutoRunning(false, false);
+            logStatus('Failed to start auto: ' + (e?.message || e));
+            showSummary('fail', 'FAIL // cannot start auto');
         }
+    }
+
+    function stopAuto() {
+        if (stage !== 'auto') return;
+        setAutoRunning(false, true);
+        logStatus('Stop requested. Current track may finish first.');
+        try {
+            api.runtime.sendMessage({ action: 'auto_trash_stop' });
+        } catch (e) {
+            logStatus('Failed to stop auto: ' + (e?.message || e));
+        }
+    }
+
+    async function startManual(batchSize) {
+        currentBatch = batchSize;
+        if (stage === 'fetching' || stage === 'downloading' || stage === 'auto') return;
         stage = 'fetching';
-        setBusy(true);
+        setManualBusy(true);
         clearSummary();
         clearTracks();
         statusDiv.innerText = '';
@@ -153,21 +222,23 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (e) {
             stage = 'error';
-            setBusy(false);
-            logStatus('Failed to start fetch: ' + (e && e.message ? e.message : e));
+            setManualBusy(false);
+            logStatus('Failed to start fetch: ' + (e?.message || e));
             showSummary('fail', 'FAIL // cannot start fetch');
         }
     }
 
     function handleSongsFetched(songs) {
+        if (stage === 'auto') return;
         const list = Array.isArray(songs) ? songs : [];
         if (list.length === 0) {
             stage = 'error';
-            setBusy(false);
+            setManualBusy(false);
             logStatus('No songs found in feed.');
             showSummary('fail', 'FAIL // empty feed');
             return;
         }
+
         const batch = list.slice(0, currentBatch || 1);
         stage = 'downloading';
         logStatus('Got ' + list.length + ' songs. Downloading first ' + batch.length + ' as WAV.');
@@ -182,16 +253,20 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (e) {
             stage = 'error';
-            setBusy(false);
-            logStatus('Failed to start download: ' + (e && e.message ? e.message : e));
+            setManualBusy(false);
+            logStatus('Failed to start download: ' + (e?.message || e));
             showSummary('fail', 'FAIL // cannot start download');
         }
     }
 
     async function handleDownloadComplete(stopped) {
+        if (stage === 'auto') {
+            await clearTransientState();
+            return;
+        }
         stage = stopped ? 'error' : 'done';
-        setBusy(false);
-        finalizeSummary();
+        setManualBusy(false);
+        finalizeSummary(stopped ? 'STOPPED' : 'OK');
         logStatus(stopped ? 'Stopped.' : 'Done.');
         await clearTransientState();
     }
@@ -209,8 +284,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
 
             case 'fetch_error':
+                if (stage === 'auto') return;
                 stage = 'error';
-                setBusy(false);
+                setManualBusy(false);
                 logStatus(message.error || 'Fetch error.');
                 showSummary('fail', 'FAIL // fetch error');
                 return;
@@ -227,20 +303,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (message.id) setTrackStatus(message.id, message.status === 'ok' ? 'ok' : 'fail', message.error);
                 return;
 
+            case 'track_trash':
+                if (message.id) setTrackStatus(message.id, message.status === 'ok' ? 'ok' : 'fail', message.error);
+                logStatus(message.status === 'ok' ? 'Marked for manual delete.' : ('Mark failed: ' + (message.error || 'unknown')));
+                return;
+
+            case 'auto_marker_count':
+                updateAutoCounter(message.marked || 0, message.title || '');
+                logStatus('Marked #' + (message.marked || 0) + (message.title ? ': ' + message.title : ''));
+                return;
+
+            case 'auto_trash_state':
+                setAutoRunning(!!message.running, !!message.stopping);
+                if (!message.running && !message.stopping) {
+                    stage = 'done';
+                    updateAutoCounter(message.movedToTrash || autoMarkedCount || 0);
+                    showSummary('success', 'AUTO // marked ' + (message.movedToTrash || autoMarkedCount || 0) + ' track(s)');
+                    logStatus('Auto finished. Debug log saved to Downloads/Suno_AutoTrash_Debug.');
+                }
+                return;
+
             case 'download_complete':
                 handleDownloadComplete(!!message.stopped);
                 return;
 
             case 'download_stopped':
-                console.log('[suno-1c] download_stopped event');
+                logStatus('Stop signal sent.');
                 return;
         }
     });
 
     goBtns.forEach(b => b.addEventListener('click', () => {
+        hideAutoCounter();
         const n = parseInt(b.dataset.count, 10) || 1;
-        start(n);
+        startManual(n);
     }));
+
+    if (autoStartBtn) autoStartBtn.addEventListener('click', startAuto);
+    if (autoStopBtn) autoStopBtn.addEventListener('click', stopAuto);
+
+    try {
+        api.runtime.sendMessage({ action: 'get_auto_trash_state' }, (state) => {
+            if (state?.running) setAutoRunning(true, false);
+        });
+    } catch (e) { /* ignore */ }
 });
-
-

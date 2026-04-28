@@ -1,14 +1,16 @@
-# Suno One-Click WAV + Highlight
+# Suno One-Click WAV + Auto Marker
 
 A small Chrome / Chromium extension for people who generate a lot of music in Suno and want a fast cleanup workflow.
 
-Pick **1**, **6**, or **16** tracks, download the newest matching Suno songs as **WAV**, save lyrics and cover art, then select/highlight the downloaded cards on `suno.com` so you can manually trash or organize them.
+Pick **1**, **6**, or **16** tracks, download the newest matching Suno songs as **WAV**, save lyrics and cover art, then select/highlight the downloaded cards on `suno.com` so you can manually trash or organize them. AUTO mode can keep going one track at a time, with a visible counter, until you press STOP.
 
 > This is an unofficial community tool. It is not affiliated with Suno.
 
 ## Features
 
 - One-click batch buttons: **1 / 6 / 16**.
+- AUTO mode: downloads one track every 5 seconds, marks it on the Suno page, and shows a running counter.
+- Feed paging for AUTO mode, so it can continue past the first 20 already-marked tracks.
 - Downloads WAV files into `Downloads/Suno_Songs/`.
 - Saves lyrics as `.txt` when available.
 - Saves cover images when available.
@@ -30,9 +32,10 @@ Pick **1**, **6**, or **16** tracks, download the newest matching Suno songs as 
 
 1. Open your Suno library/feed page.
 2. Click the extension icon.
-3. Choose **1**, **6**, or **16**.
+3. Choose **1**, **6**, or **16** for a manual batch, or **AUTO** for a one-by-one conveyor.
 4. Keep the Suno tab open while the extension fetches and downloads tracks.
-5. After download, highlighted cards show which tracks were saved successfully.
+5. Do not manually scroll the Suno page while **AUTO** runs; the extension uses the page position to keep its visual marker reliable.
+6. Press **STOP** when you have enough. The marked/highlighted cards are ready for your manual cleanup decision.
 
 ## Companion Converter Tool
 

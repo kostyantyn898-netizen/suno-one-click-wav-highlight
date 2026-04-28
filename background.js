@@ -8,6 +8,9 @@ let stopDownloadRequested = false;
 let isDownloading = false;
 let currentDownloadJobId = 0;
 let activeDownloadIds = new Set();
+let autoTrashStopRequested = false;
+let isAutoTrashRunning = false;
+let autoTrashDebugLog = [];
 
 const DOWNLOAD_STATE_KEY = 'sunoDownloadState';
 const LAST_BATCH_KEY = 'sunoOneClickLastBatch';
@@ -91,19 +94,22 @@ function broadcastDownloadState() {
     }
 }
 
-async function highlightSongsOnSuno(batchSongs) {
+async function highlightSongsOnSuno(batchSongs, highlightOptions = {}) {
     const tab = await getSunoTab();
     if (!tab?.id) return { ok: false, highlighted: 0, error: "No Suno tab found" };
 
     const songs = Array.isArray(batchSongs) ? batchSongs : [];
     const results = await api.scripting.executeScript({
         target: { tabId: tab.id },
-        func: async (inputSongs) => {
+        func: async (inputSongs, inputOptions) => {
             const STYLE_ID = 'suno-oneclick-highlight-style';
             const HIGHLIGHT_CLASS = 'suno-oneclick-downloaded';
             const BADGE_CLASS = 'suno-oneclick-badge';
             const DATA_ATTR = 'data-suno-oneclick-downloaded';
 
+            const options = inputOptions || {};
+            const preserveOld = !!options.preserveOld;
+            const badgeText = String(options.badgeText || 'DOWNLOADED');
             const songs = (inputSongs || []).filter(s => s && (s.id || s.title)).map(s => ({
                 id: String(s.id || ''),
                 short8: String(s.id || '').slice(-8),
@@ -210,11 +216,13 @@ async function highlightSongsOnSuno(batchSongs) {
             }
 
             function addBadge(card) {
-                if (!card || card.querySelector?.('.' + BADGE_CLASS)) return;
+                if (!card) return;
+                const existing = card.querySelector?.('.' + BADGE_CLASS);
+                if (existing) { existing.textContent = badgeText; return; }
                 if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
                 const badge = document.createElement('div');
                 badge.className = BADGE_CLASS;
-                badge.textContent = 'DOWNLOADED';
+                badge.textContent = badgeText;
                 card.appendChild(badge);
             }
 
@@ -267,7 +275,7 @@ async function highlightSongsOnSuno(batchSongs) {
                 return found;
             }
 
-            clearOld();
+            if (!preserveOld) clearOld();
             ensureStyle();
 
             const highlighted = [];
@@ -409,7 +417,7 @@ async function highlightSongsOnSuno(batchSongs) {
             if (highlighted[0]) highlighted[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
             return { highlighted: highlighted.length, selected: selection.selected || 0, selection };
         },
-        args: [songs]
+        args: [songs, highlightOptions]
     });
 
     const result = results?.[0]?.result || {};
@@ -432,7 +440,352 @@ try {
     // ignore
 }
 
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function getSunoAuthToken() {
+    appendAutoTrashDebug('auth: locating Suno tab');
+    const tab = await getSunoTab();
+    if (!tab?.id || !tab.url || !tab.url.includes("suno.com")) {
+        throw new Error("Please open Suno.com first.");
+    }
+
+    appendAutoTrashDebug('auth: requesting Clerk token');
+    const tokenResults = await api.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "MAIN",
+        func: async () => {
+            try {
+                if (window.Clerk && window.Clerk.session) {
+                    return await Promise.race([
+                        window.Clerk.session.getToken(),
+                        new Promise(resolve => setTimeout(() => resolve(null), 5000))
+                    ]);
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
+        }
+    });
+
+    const token = tokenResults?.[0]?.result || null;
+    appendAutoTrashDebug(token ? 'auth: token ok' : 'auth: token missing');
+    if (!token) throw new Error("Could not get Suno auth token.");
+    return { token, tabId: tab.id };
+}
+
+async function fetchLatestSongForAutoTrash(excludeIds = new Set()) {
+    appendAutoTrashDebug('feed: start');
+    const auth = await getSunoAuthToken();
+    appendAutoTrashDebug('feed: resolving user id');
+    const userId = await fetchCurrentUserId(auth.token);
+    appendAutoTrashDebug(userId ? 'feed: user id ok' : 'feed: user id missing, continuing');
+
+    let cursor = null;
+    const maxPages = 12;
+
+    for (let page = 1; page <= maxPages; page++) {
+        const body = {
+            limit: 20,
+            filters: {
+                disliked: "False",
+                trashed: "False",
+                fromStudioProject: { presence: "False" }
+            }
+        };
+
+        if (userId) {
+            body.filters.user = { presence: "True", userId };
+        }
+        if (cursor) {
+            body.cursor = cursor;
+        }
+
+        appendAutoTrashDebug('feed: request /api/feed/v3 page ' + page + (cursor ? ' with cursor' : ''));
+        const response = await fetch('https://studio-api.prod.suno.com/api/feed/v3', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${auth.token}`
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Feed HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const clips = Array.isArray(data?.clips) ? data.clips : [];
+        appendAutoTrashDebug('feed: page ' + page + ' got ' + clips.length + ' clips, excluding ' + excludeIds.size + ' already processed');
+
+        const clip = clips.find(c => c?.id && !c?.is_trashed && !c?.trashed && !excludeIds.has(c.id));
+        appendAutoTrashDebug(clip?.id ? ('feed: selected ' + clip.id + ' from page ' + page) : ('feed: no selectable clip on page ' + page));
+        if (clip) {
+            return {
+                id: clip.id,
+                title: clip.title || `Untitled_${clip.id}`,
+                audio_url: clip.audio_url || null,
+                image_url: clip.image_url || clip.image_large_url || clip.cover_image_url || null,
+                lyrics: clip.lyrics || clip.display_lyrics || clip.metadata?.lyrics || clip.metadata?.prompt || null
+            };
+        }
+
+        cursor = data?.next_cursor || data?.cursor || null;
+        if (!cursor || data?.has_more === false) {
+            appendAutoTrashDebug('feed: no more pages');
+            break;
+        }
+    }
+
+    appendAutoTrashDebug('feed: no selectable clip after paging');
+    return null;
+}
+async function trashSongsOnSuno(songIds) {
+    const ids = (Array.isArray(songIds) ? songIds : [])
+        .filter(id => typeof id === 'string' && id.length > 0);
+    if (!ids.length) return { ok: false, status: 0, error: "No clip ids" };
+
+    const auth = await getSunoAuthToken();
+    appendAutoTrashDebug('trash: request inside Suno tab for ' + ids.join(','));
+
+    const results = await api.scripting.executeScript({
+        target: { tabId: auth.tabId },
+        world: "MAIN",
+        func: async (clipIds, authToken) => {
+            const endpoints = [
+                'https://studio-api-prod.suno.com/api/gen/trash',
+                'https://studio-api.prod.suno.com/api/gen/trash'
+            ];
+
+            let last = null;
+            for (const url of endpoints) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({ trash: true, clip_ids: clipIds })
+                    });
+
+                    let data = null;
+                    try { data = await response.json(); } catch (e) {}
+                    last = { ok: response.ok, status: response.status, data };
+                    if (response.ok && data?.is_trashed === true) return last;
+                } catch (e) {
+                    last = { ok: false, status: 0, error: e?.message || String(e) };
+                }
+            }
+            return last || { ok: false, status: 0, error: 'Trash request failed' };
+        },
+        args: [ids, auth.token]
+    });
+
+    const result = results?.[0]?.result || { ok: false, status: 0, error: 'No trash result' };
+    appendAutoTrashDebug('trash: response ' + JSON.stringify(result));
+    return {
+        ok: !!(result.ok && result.data?.is_trashed === true),
+        status: result.status || 0,
+        data: result.data || null,
+        error: result.error || (result.ok ? 'Trash response did not confirm is_trashed=true' : 'Trash request failed')
+    };
+}
+
+function appendAutoTrashDebug(text) {
+    const stamp = new Date().toISOString();
+    autoTrashDebugLog.push(`[${stamp}] ${text}`);
+    if (autoTrashDebugLog.length > 1000) {
+        autoTrashDebugLog = autoTrashDebugLog.slice(-1000);
+    }
+}
+
+async function saveAutoTrashDebugLog(reason = 'finished') {
+    if (!autoTrashDebugLog.length) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const body = [
+        'Suno WAV Auto Trash Local debug log',
+        `Reason: ${reason}`,
+        `Saved: ${new Date().toISOString()}`,
+        '',
+        ...autoTrashDebugLog
+    ].join('\n');
+
+    try {
+        await api.downloads.download({
+            url: 'data:text/plain;charset=utf-8,' + encodeURIComponent(body),
+            filename: `Suno_AutoTrash_Debug/suno-auto-trash-${stamp}.txt`,
+            conflictAction: 'uniquify',
+            saveAs: false
+        });
+    } catch (e) {
+        try { api.runtime.sendMessage({ action: 'log', text: `Debug log save failed: ${e?.message || e}` }); } catch (ignored) {}
+    }
+}
+async function runAutoTrashLoop(options = {}) {
+    if (isAutoTrashRunning) {
+        logToPopup("⚠️ Auto marker already running.");
+        return;
+    }
+    if (isDownloading) {
+        logToPopup("⚠️ Download already running. Stop it first.");
+        return;
+    }
+
+    isAutoTrashRunning = true;
+    autoTrashStopRequested = false;
+    autoTrashDebugLog = [];
+    appendAutoTrashDebug('auto: run loop entered');
+    let movedToTrash = 0; // kept as internal counter for marked tracks
+    const processedIds = new Set();
+    const folderName = options.folderName || 'Suno_Songs';
+    const downloadOptions = normalizeDownloadOptions(options.downloadOptions);
+
+    try { api.runtime.sendMessage({ action: "auto_trash_state", running: true }); } catch (e) {}
+    try { api.runtime.sendMessage({ action: "auto_marker_count", marked: 0 }); } catch (e) {}
+    logToPopup("▶️ Auto marker started: download one track, then mark it.");
+    logToPopup("⚠️ Do not scroll the Suno page while AUTO runs.");
+
+    while (!autoTrashStopRequested) {
+        let song = null;
+        try {
+            song = await fetchLatestSongForAutoTrash(processedIds);
+        } catch (e) {
+            logToPopup(`❌ Auto marker feed error: ${e?.message || e}`);
+            break;
+        }
+
+        if (!song?.id) {
+            logToPopup("✅ No more visible tracks in feed.");
+            break;
+        }
+
+        processedIds.add(song.id);
+        logToPopup(`🎯 Auto marker next: ${song.title || song.id}`);
+        stopDownloadRequested = false;
+        isDownloading = true;
+        currentDownloadJobId += 1;
+        activeDownloadIds = new Set();
+        await persistDownloadState({ startedAt: Date.now(), autoTrash: true });
+        broadcastDownloadState();
+
+        try {
+            api.runtime.sendMessage({
+                action: "track_init",
+                tracks: [{ id: song.id, title: song.title || `Untitled_${song.id}` }]
+            });
+        } catch (e) {}
+
+        let result = null;
+        try {
+            result = await downloadSelectedSongs(
+                folderName,
+                [song],
+                'wav',
+                currentDownloadJobId,
+                downloadOptions,
+                { skipHighlight: true }
+            );
+        } catch (e) {
+            logToPopup(`⚠️ Auto marker download error: ${e?.message || e}`);
+        }
+
+        const downloadedOk = Array.isArray(result?.successfulSongs)
+            && result.successfulSongs.some(s => s?.id === song.id);
+
+        if (autoTrashStopRequested || result?.stopped) {
+            logToPopup("⏹️ Auto marker stopped before mark step.");
+            break;
+        }
+
+        if (!downloadedOk) {
+            logToPopup(`⚠️ Not trashed: WAV was not confirmed for ${song.title || song.id}.`);
+            await delay(1500);
+            continue;
+        }
+
+        let markedForManualDelete = false;
+        try {
+            const highlightResult = await highlightSongsOnSuno([{ id: song.id, title: song.title || ('Untitled_' + song.id) }], { preserveOld: true, badgeText: 'READY' });
+            if (highlightResult?.selected) {
+                markedForManualDelete = true;
+                logToPopup(`✅ Auto selected ${highlightResult.selected} card(s). Ready for manual delete.`);
+            } else if (highlightResult?.highlighted) {
+                markedForManualDelete = true;
+                logToPopup(`✨ Auto highlighted ${highlightResult.highlighted} card(s). Ready for manual delete.`);
+            } else {
+                logToPopup('⚠️ Auto downloaded the track, but could not find its visible card.');
+            }
+        } catch (e) {
+            logToPopup(`⚠️ Auto highlight/select failed: ${e?.message || e}`);
+        }
+
+        if (markedForManualDelete) {
+            movedToTrash += 1;
+            try { api.runtime.sendMessage({ action: "auto_marker_count", marked: movedToTrash, title: song.title || song.id }); } catch (e) {}
+        }
+        await delay(5000);
+    }
+
+    const stoppedByUser = autoTrashStopRequested;
+    isAutoTrashRunning = false;
+    autoTrashStopRequested = false;
+    stopDownloadRequested = false;
+    await saveAutoTrashDebugLog(stoppedByUser ? 'stopped' : 'finished');
+    try { api.runtime.sendMessage({ action: "auto_trash_state", running: false, movedToTrash }); } catch (e) {}
+    logToPopup(`⏹️ Auto marker finished. Marked ${movedToTrash} track(s) for manual delete.`);
+}
+
+function requestAutoTrashStop() {
+    appendAutoTrashDebug('auto: stop requested');
+    autoTrashStopRequested = true;
+    stopDownloadRequested = true;
+    isDownloading = false;
+    persistDownloadState({ stoppedAt: Date.now(), autoTrash: true });
+    broadcastDownloadState();
+
+    getSunoTab().then(tab => {
+        if (tab?.id) {
+            api.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => {
+                    window.sunoStopDownload = true;
+                    window.sunoStopFetch = true;
+                }
+            });
+        }
+    });
+
+    try { api.runtime.sendMessage({ action: "auto_trash_state", running: false, stopping: true }); } catch (e) {}
+    try { api.runtime.sendMessage({ action: "download_stopped" }); } catch (e) {}
+}
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === "auto_trash_start") {
+        runAutoTrashLoop({
+            folderName: message.folderName || 'Suno_Songs',
+            downloadOptions: message.downloadOptions || { music: true, lyrics: true, image: true }
+        });
+        sendResponse({ ok: true, running: true });
+        return true;
+    }
+
+    if (message.action === "auto_trash_stop") {
+        requestAutoTrashStop();
+        sendResponse({ ok: true, stopping: true });
+        return true;
+    }
+
+    if (message.action === "get_auto_trash_state") {
+        sendResponse({ running: isAutoTrashRunning, stopping: autoTrashStopRequested });
+        return true;
+    }
+
     if (message.action === "fetch_feed_page") {
         (async () => {
             try {
@@ -473,7 +826,8 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 const timeoutMs = 20000;
                 const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-                const response = await fetch('https://studio-api.prod.suno.com/api/feed/v3', {
+                appendAutoTrashDebug('feed: request /api/feed/v3');
+    const response = await fetch('https://studio-api.prod.suno.com/api/feed/v3', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -668,7 +1022,8 @@ async function fetchSongsList(isPublicOnly, maxPages, checkNewOnly = false, know
             logToPopup("🔑 Extracting Auth Token...");
         }
 
-        const tokenResults = await api.scripting.executeScript({
+        appendAutoTrashDebug('auth: requesting Clerk token');
+    const tokenResults = await api.scripting.executeScript({
             target: { tabId: tabId },
             world: "MAIN",
             func: async () => {
@@ -782,7 +1137,7 @@ function normalizeDownloadOptions(options) {
     };
 }
 
-async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 0, downloadOptions = { music: true, lyrics: true, image: true }) {
+async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 0, downloadOptions = { music: true, lyrics: true, image: true }, runOptions = {}) {
     const cleanFolder = folderName.replace(/[^a-zA-Z0-9_-]/g, "");
     
     function sanitizeFilename(name) {
@@ -937,7 +1292,8 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
         authCtx.tabId = tab.id;
 
         if (!authCtx.token) {
-            const tokenResults = await api.scripting.executeScript({
+            appendAutoTrashDebug('auth: requesting Clerk token');
+    const tokenResults = await api.scripting.executeScript({
                 target: { tabId: tab.id },
                 world: "MAIN",
                 func: async () => {
@@ -1229,7 +1585,8 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
         const tabId = tab.id;
         
         // Get auth token
-        const tokenResults = await api.scripting.executeScript({
+        appendAutoTrashDebug('auth: requesting Clerk token');
+    const tokenResults = await api.scripting.executeScript({
             target: { tabId: tabId },
             world: "MAIN",
             func: async () => {
@@ -1470,7 +1827,7 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
     await clearDownloadState();
     try { await api.storage.local.set({ [LAST_BATCH_KEY]: { at: Date.now(), songs: lastBatchSongs } }); } catch (e) { /* ignore */ }
 
-    if (!stopped && lastBatchSongs.length) {
+    if (!runOptions.skipHighlight && !stopped && lastBatchSongs.length) {
         try {
             const result = await highlightSongsOnSuno(lastBatchSongs);
             if (result?.selected) {
@@ -1486,9 +1843,11 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
     }
 
     api.runtime.sendMessage({ action: "download_complete", stopped: stopped });
+    return { stopped, successfulSongs: lastBatchSongs, failedCount, downloadedCount };
 }
 
 function logToPopup(text) {
+    appendAutoTrashDebug(String(text || ''));
     try { api.runtime.sendMessage({ action: "log", text: text }); } catch (e) {}
 }
 

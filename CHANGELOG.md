@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.10 - Auto Marker polish
+
+- Added a visible AUTO counter in the popup for marked tracks.
+- Added an in-popup warning not to scroll Suno while AUTO is running.
+- AUTO feed fetching now pages forward so it can continue past the first 20 already-processed tracks.
+- Kept cleanup manual and safe: tracks are marked/highlighted, not auto-deleted.
+
 ## 1.4.0 - Safer visible-range selection
 
 - Changed batch buttons to 1 / 6 / 16 for a safer visible-range workflow.

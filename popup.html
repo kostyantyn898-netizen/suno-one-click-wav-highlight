@@ -153,6 +153,45 @@
         letter-spacing: 1px;
       }
 
+      .auto-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .auto-row .go-btn {
+        flex: 1;
+        padding: 11px 8px;
+        font-size: 11px;
+        letter-spacing: 1px;
+      }
+
+      #autoCounter {
+        display: none;
+        margin-top: 10px;
+        padding: 9px 10px;
+        border: 1px solid rgba(0, 240, 255, 0.45);
+        background: linear-gradient(90deg, rgba(0,240,255,0.10) 0%, rgba(182,255,60,0.08) 100%);
+        color: var(--neon-cyan);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        text-align: center;
+        box-shadow: 0 0 12px rgba(0,240,255,0.14), inset 0 0 10px rgba(0,240,255,0.04);
+      }
+
+      #autoStartBtn {
+        border-color: var(--neon-lime);
+        color: var(--neon-lime);
+        background: linear-gradient(135deg, rgba(182,255,60,0.12) 0%, rgba(0,240,255,0.08) 100%);
+      }
+
+      #autoStopBtn {
+        border-color: var(--neon-red);
+        color: var(--neon-red);
+        background: linear-gradient(135deg, rgba(255,51,85,0.14) 0%, rgba(255,43,214,0.08) 100%);
+      }
       #tracks {
         margin-top: 14px;
         display: none;
@@ -307,7 +346,7 @@
 
     <main>
       <div class="note">
-        Open <b>suno.com</b>, stay logged in, then pick 1 / 6 / 16. Output -> <b>Suno_Songs/</b>.
+Open <b>suno.com</b>, stay logged in. Manual: 1 / 6 / 16. Auto: one track every 5 seconds -> mark for manual delete. Do not scroll Suno while AUTO runs.
       </div>
 
       <div class="go-row">
@@ -315,7 +354,12 @@
         <button class="go-btn" data-count="6">6</button>
         <button class="go-btn" data-count="16">16</button>
       </div>
-      
+
+      <div class="auto-row">
+        <button id="autoStartBtn" class="go-btn">AUTO</button>
+        <button id="autoStopBtn" class="go-btn" disabled>STOP</button>
+      </div>
+      <div id="autoCounter" aria-live="polite">AUTO // 0 MARKED</div>
       <div id="tracks" aria-live="polite"></div>
 
       <div id="summary" role="status"></div>
