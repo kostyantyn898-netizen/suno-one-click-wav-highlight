@@ -17,6 +17,10 @@ let autoMarkedCount = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
     const goBtns = document.querySelectorAll('.go-btn[data-count]');
+    const manualStartBtn = document.getElementById('manualStartBtn');
+    const batchCountInput = document.getElementById('batchCount');
+    const countMinusBtn = document.getElementById('countMinusBtn');
+    const countPlusBtn = document.getElementById('countPlusBtn');
     const autoStartBtn = document.getElementById('autoStartBtn');
     const autoStopBtn = document.getElementById('autoStopBtn');
     const autoCounterDiv = document.getElementById('autoCounter');
@@ -37,6 +41,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setManualBusy(busy) {
         goBtns.forEach(b => b.disabled = busy);
+        if (manualStartBtn) manualStartBtn.disabled = busy;
+        if (batchCountInput) batchCountInput.disabled = busy;
+        if (countMinusBtn) countMinusBtn.disabled = busy;
+        if (countPlusBtn) countPlusBtn.disabled = busy;
         if (autoStartBtn) autoStartBtn.disabled = busy;
         if (autoStopBtn && stage !== 'auto') autoStopBtn.disabled = true;
     }
@@ -46,6 +54,10 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (stage === 'auto') stage = stopping ? 'auto' : 'done';
 
         goBtns.forEach(b => b.disabled = running || !!stopping);
+        if (manualStartBtn) manualStartBtn.disabled = running || !!stopping;
+        if (batchCountInput) batchCountInput.disabled = running || !!stopping;
+        if (countMinusBtn) countMinusBtn.disabled = running || !!stopping;
+        if (countPlusBtn) countPlusBtn.disabled = running || !!stopping;
         if (autoStartBtn) autoStartBtn.disabled = running || !!stopping;
         if (autoStopBtn) autoStopBtn.disabled = !running && !stopping;
     }
@@ -157,6 +169,14 @@ document.addEventListener('DOMContentLoaded', () => {
         try { await api.storage.local.remove([DOWNLOAD_STATE_KEY, LAST_BATCH_KEY]); } catch (e) { /* ignore */ }
     }
 
+    function getBatchCount() {
+        const raw = parseInt(batchCountInput?.value, 10);
+        const count = Number.isFinite(raw) ? raw : 5;
+        const clamped = Math.max(1, Math.min(10, count));
+        if (batchCountInput) batchCountInput.value = String(clamped);
+        return clamped;
+    }
+
     async function startAuto() {
         if (stage === 'fetching' || stage === 'downloading' || stage === 'auto') return;
         stage = 'auto';
@@ -165,7 +185,8 @@ document.addEventListener('DOMContentLoaded', () => {
         statusDiv.innerText = '';
         updateAutoCounter(0);
         setAutoRunning(true, false);
-        logStatus('Auto marker started: 1 track, then 5s pause.');
+        const batchSize = getBatchCount();
+        logStatus('AUTO started: up to ' + batchSize + ' track(s) per cycle.');
         logStatus('Do not scroll the Suno page while AUTO runs.');
         await clearRunState();
 
@@ -173,7 +194,8 @@ document.addEventListener('DOMContentLoaded', () => {
             api.runtime.sendMessage({
                 action: 'auto_trash_start',
                 folderName: FOLDER,
-                downloadOptions: { music: true, lyrics: true, image: true }
+                downloadOptions: { music: true, lyrics: true, image: true },
+                batchSize
             }, (response) => {
                 const err = api.runtime.lastError;
                 if (err) {
@@ -249,7 +271,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 folderName: FOLDER,
                 format: FORMAT,
                 songs: batch,
-                downloadOptions: { music: true, lyrics: true, image: true }
+                downloadOptions: { music: true, lyrics: true, image: true },
+                batchSize: batch.length
             });
         } catch (e) {
             stage = 'error';
@@ -338,6 +361,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const n = parseInt(b.dataset.count, 10) || 1;
         startManual(n);
     }));
+
+    if (manualStartBtn) manualStartBtn.addEventListener('click', () => {
+        hideAutoCounter();
+        startManual(getBatchCount());
+    });
+
+    if (batchCountInput) batchCountInput.addEventListener('change', getBatchCount);
+    if (batchCountInput) batchCountInput.addEventListener('input', getBatchCount);
+    if (countMinusBtn) countMinusBtn.addEventListener('click', () => {
+        const next = Math.max(1, getBatchCount() - 1);
+        if (batchCountInput) batchCountInput.value = String(next);
+    });
+    if (countPlusBtn) countPlusBtn.addEventListener('click', () => {
+        const next = Math.min(10, getBatchCount() + 1);
+        if (batchCountInput) batchCountInput.value = String(next);
+    });
 
     if (autoStartBtn) autoStartBtn.addEventListener('click', startAuto);
     if (autoStopBtn) autoStopBtn.addEventListener('click', stopAuto);

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0 - Custom 1-10 workflow
+
+- Replaced fixed manual batch buttons with a custom 1-10 count control.
+- Added plus/minus controls so the selected count is obvious in the popup.
+- Manual DOWNLOAD now uses the selected count for one batch.
+- AUTO now repeats the selected count per cycle with no extra delay between completed cycles.
+- STOP now marks completed tracks from the current AUTO cycle before exiting.
+- Hardened WAV polling when Suno reports complete/ready before returning a URL.
+- Kept AUTO stop state cleaner so completed tracks can still be marked before exit.
+- Updated popup title to match the current extension name.
+
 ## 1.4.10 - Auto Marker polish
 
 - Added a visible AUTO counter in the popup for marked tracks.
