@@ -4,14 +4,15 @@ A small Chrome / Chromium extension for people who generate a lot of music in Su
 
 **Download:** [Latest release](https://github.com/kostyantyn898-netizen/suno-one-click-wav-highlight/releases/latest)
 
-Pick **1**, **6**, or **16** tracks, download the newest matching Suno songs as **WAV**, save lyrics and cover art, then select/highlight the downloaded cards on `suno.com` so you can manually trash or organize them. AUTO mode can keep going one track at a time, with a visible counter, until you press STOP.
+Choose any number from **1** to **10**, download the newest matching Suno songs as **WAV**, save lyrics and cover art, then select/highlight the downloaded cards on `suno.com` so you can manually trash or organize them. AUTO mode repeats the selected batch size, with a visible counter, until you press STOP.
 
 > This is an unofficial community tool. It is not affiliated with Suno.
 
 ## Features
 
-- One-click batch buttons: **1 / 6 / 16**.
-- AUTO mode: downloads one track every 5 seconds, marks it on the Suno page, and shows a running counter.
+- Custom count field: choose **1-10** tracks.
+- Manual **DOWNLOAD** mode saves one batch using the selected count.
+- **AUTO** mode repeats the selected count per cycle and marks completed tracks before continuing.
 - Feed paging for AUTO mode, so it can continue past the first 20 already-marked tracks.
 - Downloads WAV files into `Downloads/Suno_Songs/`.
 - Saves lyrics as `.txt` when available.
@@ -34,10 +35,10 @@ Pick **1**, **6**, or **16** tracks, download the newest matching Suno songs as 
 
 1. Open your Suno library/feed page.
 2. Click the extension icon.
-3. Choose **1**, **6**, or **16** for a manual batch, or **AUTO** for a one-by-one conveyor.
+3. Enter a number from **1** to **10**. Use **DOWNLOAD** for one manual batch, or **AUTO** for a repeating conveyor.
 4. Keep the Suno tab open while the extension fetches and downloads tracks.
 5. Do not manually scroll the Suno page while **AUTO** runs; the extension uses the page position to keep its visual marker reliable.
-6. Press **STOP** when you have enough. The marked/highlighted cards are ready for your manual cleanup decision.
+6. Press **STOP** when you have enough. If a batch already finished downloading, the extension marks those tracks before exiting. The marked/highlighted cards are ready for your manual cleanup decision.
 
 ## Companion Converter Tool
 
@@ -71,9 +72,9 @@ python tools\suno_downloads_to_music.py --src "D:\Downloads" --dst "D:\Music"
 setx SUNO_CONVERT_FFMPEG "C:\tools\ffmpeg\bin\ffmpeg.exe"
 ```
 
-## Why the maximum batch is 16
+## Why the maximum batch is 10
 
-Suno's UI virtualizes the feed. In practice, about 16 cards can be handled without forcing a risky scroll/search pass, so this build caps the one-click batch at 16. Smaller batches are friendlier to Suno, easier to verify visually, and safer for Shift-click range selection.
+Suno can handle several downloads at once, but browsers, network speed, and Suno WAV conversion latency vary. This build lets the user choose **1-10** tracks so slower machines can stay conservative while faster setups can run larger AUTO cycles.
 
 ## Permissions
 
@@ -102,7 +103,7 @@ See [PRIVACY.md](PRIVACY.md) for the short privacy policy.
 ## Known limitations
 
 - Suno may change private API endpoints at any time.
-- WAV conversion can take time, especially for 16-track batches.
+- WAV conversion can take time, especially for larger AUTO cycles.
 - Highlighting depends on the current Suno UI and visible feed/list page.
 - The extension highlights cards for manual cleanup; it does **not** auto-delete or auto-trash tracks.
 

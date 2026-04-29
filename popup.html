@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Suno One-Click WAV + Highlight</title>
+    <title>Suno WAV Auto Marker</title>
     <style>
       :root {
         --bg-0: #07060f;
@@ -139,6 +139,62 @@
       @keyframes pulse-glow {
         0%, 100% { box-shadow: 0 0 0 1px rgba(0,240,255,0.15), 0 0 18px rgba(0,240,255,0.2); }
         50%      { box-shadow: 0 0 0 1px rgba(255,43,214,0.25), 0 0 22px rgba(255,43,214,0.4); }
+      }
+
+
+      .count-row {
+        display: grid;
+        grid-template-columns: 42px 62px 42px 1fr;
+        gap: 8px;
+        align-items: stretch;
+        margin-top: 4px;
+      }
+
+
+      .count-btn {
+        width: 100%;
+        min-width: 0;
+        padding: 12px 0;
+        border: 1px solid var(--neon-cyan);
+        border-radius: 4px;
+        background: rgba(0, 240, 255, 0.08);
+        color: var(--neon-cyan);
+        font-family: inherit;
+        font-weight: 900;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 0 12px rgba(0,240,255,0.16), inset 0 0 10px rgba(0,240,255,0.05);
+      }
+
+      .count-btn:hover:not(:disabled) {
+        color: var(--bg-0);
+        background: var(--neon-cyan);
+      }
+
+      .count-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      #batchCount {
+        width: 100%;
+        min-width: 0;
+        padding: 12px 10px;
+        border: 1px solid var(--neon-cyan);
+        border-radius: 4px;
+        background: rgba(7, 6, 15, 0.82);
+        color: var(--neon-cyan);
+        font-family: inherit;
+        font-weight: 800;
+        font-size: 16px;
+        text-align: center;
+        outline: none;
+        box-shadow: inset 0 0 12px rgba(0,240,255,0.08), 0 0 12px rgba(0,240,255,0.16);
+      }
+
+      #batchCount:focus {
+        border-color: var(--neon-lime);
+        color: var(--neon-lime);
       }
 
       .go-row {
@@ -346,13 +402,14 @@
 
     <main>
       <div class="note">
-Open <b>suno.com</b>, stay logged in. Manual: 1 / 6 / 16. Auto: one track every 5 seconds -> mark for manual delete. Do not scroll Suno while AUTO runs.
+Open <b>suno.com</b>, stay logged in. Pick 1-10 tracks. Manual downloads one batch. AUTO repeats that many per cycle and marks for manual delete. Do not scroll Suno while AUTO runs.
       </div>
 
-      <div class="go-row">
-        <button class="go-btn" data-count="1">1</button>
-        <button class="go-btn" data-count="6">6</button>
-        <button class="go-btn" data-count="16">16</button>
+      <div class="count-row">
+        <button id="countMinusBtn" class="count-btn" type="button" aria-label="Less">-</button>
+        <input id="batchCount" type="number" min="1" max="10" step="1" value="5" inputmode="numeric" aria-label="Track count" />
+        <button id="countPlusBtn" class="count-btn" type="button" aria-label="More">+</button>
+        <button id="manualStartBtn" class="go-btn">DOWNLOAD</button>
       </div>
 
       <div class="auto-row">

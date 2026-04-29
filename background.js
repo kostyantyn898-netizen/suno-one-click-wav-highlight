@@ -646,39 +646,46 @@ async function runAutoTrashLoop(options = {}) {
     const processedIds = new Set();
     const folderName = options.folderName || 'Suno_Songs';
     const downloadOptions = normalizeDownloadOptions(options.downloadOptions);
+    const autoBatchSize = Math.max(1, Math.min(10, parseInt(options.batchSize, 10) || 5));
 
     try { api.runtime.sendMessage({ action: "auto_trash_state", running: true }); } catch (e) {}
     try { api.runtime.sendMessage({ action: "auto_marker_count", marked: 0 }); } catch (e) {}
-    logToPopup("▶️ Auto marker started: download one track, then mark it.");
+    logToPopup("▶️ Custom AUTO marker started: download up to " + autoBatchSize + " track(s), then mark them.");
     logToPopup("⚠️ Do not scroll the Suno page while AUTO runs.");
 
     while (!autoTrashStopRequested) {
-        let song = null;
-        try {
-            song = await fetchLatestSongForAutoTrash(processedIds);
-        } catch (e) {
-            logToPopup(`❌ Auto marker feed error: ${e?.message || e}`);
-            break;
+        const batch = [];
+        for (let i = 0; i < autoBatchSize && !autoTrashStopRequested; i++) {
+            let song = null;
+            try {
+                song = await fetchLatestSongForAutoTrash(processedIds);
+            } catch (e) {
+                logToPopup(`❌ Auto marker feed error: ${e?.message || e}`);
+                break;
+            }
+
+            if (!song?.id) break;
+            processedIds.add(song.id);
+            batch.push(song);
         }
 
-        if (!song?.id) {
+        if (!batch.length) {
             logToPopup("✅ No more visible tracks in feed.");
             break;
         }
 
-        processedIds.add(song.id);
-        logToPopup(`🎯 Auto marker next: ${song.title || song.id}`);
+        logToPopup(`🎯 Custom AUTO next (${batch.length}/${autoBatchSize}): ${batch.map(s => s.title || s.id).join(' + ')}`);
         stopDownloadRequested = false;
         isDownloading = true;
         currentDownloadJobId += 1;
         activeDownloadIds = new Set();
-        await persistDownloadState({ startedAt: Date.now(), autoTrash: true });
+        await persistDownloadState({ startedAt: Date.now(), autoTrash: true, customBatchSize: autoBatchSize });
         broadcastDownloadState();
 
         try {
             api.runtime.sendMessage({
                 action: "track_init",
-                tracks: [{ id: song.id, title: song.title || `Untitled_${song.id}` }]
+                tracks: batch.map(s => ({ id: s.id, title: s.title || `Untitled_${s.id}` }))
             });
         } catch (e) {}
 
@@ -686,51 +693,56 @@ async function runAutoTrashLoop(options = {}) {
         try {
             result = await downloadSelectedSongs(
                 folderName,
-                [song],
+                batch,
                 'wav',
                 currentDownloadJobId,
                 downloadOptions,
                 { skipHighlight: true }
             );
         } catch (e) {
-            logToPopup(`⚠️ Auto marker download error: ${e?.message || e}`);
+            logToPopup(`⚠️ Custom AUTO download error: ${e?.message || e}`);
         }
 
-        const downloadedOk = Array.isArray(result?.successfulSongs)
-            && result.successfulSongs.some(s => s?.id === song.id);
+        const successfulBatch = Array.isArray(result?.successfulSongs)
+            ? result.successfulSongs.filter(s => s?.id)
+            : [];
 
-        if (autoTrashStopRequested || result?.stopped) {
-            logToPopup("⏹️ Auto marker stopped before mark step.");
-            break;
-        }
+        const stopAfterMark = autoTrashStopRequested || result?.stopped;
 
-        if (!downloadedOk) {
-            logToPopup(`⚠️ Not trashed: WAV was not confirmed for ${song.title || song.id}.`);
+        if (!successfulBatch.length) {
+            logToPopup(stopAfterMark
+                ? '⏹️ Custom AUTO stopped; no completed WAV to mark in this cycle.'
+                : '⚠️ Custom AUTO: no WAV was confirmed in this cycle.');
+            if (stopAfterMark) break;
             await delay(1500);
             continue;
         }
 
+        if (stopAfterMark) {
+            logToPopup(`⏹️ Custom AUTO stopped; marking ${successfulBatch.length} completed track(s) before exit.`);
+        }
+
         let markedForManualDelete = false;
         try {
-            const highlightResult = await highlightSongsOnSuno([{ id: song.id, title: song.title || ('Untitled_' + song.id) }], { preserveOld: true, badgeText: 'READY' });
+            const highlightResult = await highlightSongsOnSuno(successfulBatch, { preserveOld: true, badgeText: 'READY' });
             if (highlightResult?.selected) {
                 markedForManualDelete = true;
-                logToPopup(`✅ Auto selected ${highlightResult.selected} card(s). Ready for manual delete.`);
+                logToPopup(`✅ Custom AUTO selected ${highlightResult.selected} card(s). Ready for manual delete.`);
             } else if (highlightResult?.highlighted) {
                 markedForManualDelete = true;
-                logToPopup(`✨ Auto highlighted ${highlightResult.highlighted} card(s). Ready for manual delete.`);
+                logToPopup(`✨ Custom AUTO highlighted ${highlightResult.highlighted} card(s). Ready for manual delete.`);
             } else {
-                logToPopup('⚠️ Auto downloaded the track, but could not find its visible card.');
+                logToPopup('⚠️ Custom AUTO downloaded tracks, but could not find their visible cards.');
             }
         } catch (e) {
-            logToPopup(`⚠️ Auto highlight/select failed: ${e?.message || e}`);
+            logToPopup(`⚠️ Custom AUTO highlight/select failed: ${e?.message || e}`);
         }
 
         if (markedForManualDelete) {
-            movedToTrash += 1;
-            try { api.runtime.sendMessage({ action: "auto_marker_count", marked: movedToTrash, title: song.title || song.id }); } catch (e) {}
+            movedToTrash += successfulBatch.length;
+            try { api.runtime.sendMessage({ action: "auto_marker_count", marked: movedToTrash, title: successfulBatch.map(s => s.title || s.id).join(' + ') }); } catch (e) {}
         }
-        await delay(5000);
+        if (stopAfterMark) break;
     }
 
     const stoppedByUser = autoTrashStopRequested;
@@ -746,7 +758,6 @@ function requestAutoTrashStop() {
     appendAutoTrashDebug('auto: stop requested');
     autoTrashStopRequested = true;
     stopDownloadRequested = true;
-    isDownloading = false;
     persistDownloadState({ stoppedAt: Date.now(), autoTrash: true });
     broadcastDownloadState();
 
@@ -769,7 +780,8 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "auto_trash_start") {
         runAutoTrashLoop({
             folderName: message.folderName || 'Suno_Songs',
-            downloadOptions: message.downloadOptions || { music: true, lyrics: true, image: true }
+            downloadOptions: message.downloadOptions || { music: true, lyrics: true, image: true },
+            batchSize: message.batchSize || 5
         });
         sendResponse({ ok: true, running: true });
         return true;
@@ -1664,7 +1676,7 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
                                         return { url: wavUrl };
                                     }
                                     if (data.status === 'complete' || data.status === 'ready') {
-                                        return { url: wavUrl };
+                                        continue;
                                     }
                                 } else if (pollResponse.status === 404 || pollResponse.status === 202) {
                                     // Still processing, continue polling
