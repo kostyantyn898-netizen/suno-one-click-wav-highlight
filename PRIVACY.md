@@ -1,26 +1,11 @@
 # Privacy Policy
 
-Suno One-Click WAV + Highlight is an unofficial browser extension that runs locally in your browser.
+Suno One-Click WAV Tools do not collect, sell, or transmit personal data to any third-party server controlled by this project.
 
-## Data collection
+The extensions run locally in your browser and use:
 
-The extension does not collect, sell, share, or transmit user data to any third-party analytics or backend service.
+- your active Suno browser session to request data needed for downloads;
+- Chrome's Downloads API to save files to your machine;
+- local extension storage for small settings such as selected batch size.
 
-## Local browser storage
-
-The extension may store temporary download state and the last successfully downloaded batch in Chrome local extension storage. This is used only for progress tracking and optional re-highlighting.
-
-## Network requests
-
-The extension communicates directly with Suno and Suno CDN endpoints to:
-
-- read your Suno feed,
-- request WAV conversion,
-- download WAV files,
-- download lyrics and cover art when available.
-
-No additional external servers are used by this extension.
-
-## Unofficial project
-
-This project is not affiliated with, endorsed by, or maintained by Suno.
+No analytics, tracking, or remote telemetry is included.
