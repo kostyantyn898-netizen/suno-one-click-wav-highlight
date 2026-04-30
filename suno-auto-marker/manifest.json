@@ -3,7 +3,7 @@
   "name": "Suno WAV Auto Marker",
   "short_name": "Suno Marker",
   "description": "Choose 1-10 Suno tracks for manual WAV download or AUTO batch size. Saves WAV, lyrics, and covers, then highlights/selects tracks for manual cleanup.",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "action": {
     "default_icon": "SunoDownloader.png",
     "default_popup": "popup.html",

@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Suno Selection Downloader</title>
+  <style>
+    :root {
+      --bg:#07060f; --cyan:#00f0ff; --magenta:#ff2bd6; --lime:#b6ff3c;
+      --red:#ff3355; --text:#e7e9ff; --dim:#8a8eb0; --muted:#5a5d7a;
+      --border:#1f1c3d; --grid:rgba(0,240,255,.06);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html,body { width:340px; }
+    body {
+      font-family:"Fira Code",Consolas,monospace; color:var(--text);
+      background:radial-gradient(ellipse at top,#1a1240 0%,var(--bg) 70%);
+    }
+    body::before {
+      content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
+      background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+      background-size:24px 24px;
+    }
+    header { position:relative; z-index:2; display:flex; align-items:center; gap:10px; padding:12px 14px 10px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,rgba(0,240,255,.05),transparent); }
+    .title { font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--cyan); text-shadow:0 0 8px rgba(0,240,255,.6); }
+    .sub { font-size:10px; letter-spacing:1px; color:var(--magenta); margin-left:auto; text-shadow:0 0 6px rgba(255,43,214,.5); }
+    main { position:relative; z-index:2; padding:14px; }
+    .note { font-size:10.5px; line-height:1.5; color:var(--dim); background:rgba(0,240,255,.05); padding:8px 10px; border-left:2px solid var(--cyan); margin-bottom:12px; }
+    .note b { color:var(--cyan); }
+    #counter { text-align:center; padding:10px; font-size:22px; font-weight:900; letter-spacing:2px; color:var(--cyan); text-shadow:0 0 14px rgba(0,240,255,.7); background:rgba(0,240,255,.06); border:1px solid rgba(0,240,255,.25); border-radius:4px; margin-bottom:12px; }
+    #counter.empty { color:var(--muted); text-shadow:none; background:transparent; border-color:var(--border); font-size:13px; }
+    .options { display:flex; gap:8px; margin-bottom:12px; font-size:10px; letter-spacing:.5px; text-transform:uppercase; }
+    .opt-btn { flex:1; padding:7px 4px; border:1px solid var(--border); border-radius:3px; background:rgba(255,255,255,.04); color:var(--dim); font-family:inherit; font-size:10px; letter-spacing:.5px; cursor:pointer; text-transform:uppercase; }
+    .opt-btn.on { border-color:var(--cyan); color:var(--cyan); background:rgba(0,240,255,.1); box-shadow:0 0 10px rgba(0,240,255,.2); }
+    .btn { width:100%; padding:12px 16px; cursor:pointer; border:1px solid var(--cyan); background:linear-gradient(135deg,rgba(0,240,255,.12),rgba(255,43,214,.12)); color:var(--cyan); font-family:inherit; font-weight:700; font-size:13px; letter-spacing:2px; text-transform:uppercase; border-radius:4px; text-shadow:0 0 8px rgba(0,240,255,.6); box-shadow:0 0 18px rgba(0,240,255,.2),inset 0 0 12px rgba(0,240,255,.06); transition:all .18s; margin-bottom:8px; }
+    .btn:hover:not(:disabled) { color:var(--bg); background:linear-gradient(135deg,var(--cyan),var(--magenta)); text-shadow:none; box-shadow:0 0 28px rgba(0,240,255,.6); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .btn.stop-btn { border-color:var(--red); color:var(--red); background:rgba(255,51,85,.1); display:none; }
+    .btn.scan-btn { border-color:var(--magenta); color:var(--magenta); background:rgba(255,43,214,.1); box-shadow:0 0 12px rgba(255,43,214,.15); font-size:11px; }
+    #refreshBtn { border-color:var(--lime); color:var(--lime); background:rgba(182,255,60,.08); }
+    .speed-row { display:flex; align-items:center; gap:8px; margin:-2px 0 12px; }
+    .speed-label { flex:1; color:var(--dim); font-size:10px; line-height:1.35; text-transform:uppercase; letter-spacing:.7px; }
+    #batchSize { width:74px; padding:8px; border:1px solid var(--cyan); border-radius:3px; color:var(--cyan); background:rgba(0,240,255,.08); font-family:inherit; font-size:12px; font-weight:700; outline:none; }
+    .aux-btn { display:none; }
+    #countdown { display:none; text-align:center; margin:6px 0 12px; font-size:38px; font-weight:900; color:var(--lime); text-shadow:0 0 18px rgba(182,255,60,.55); }
+    #doneBanner { display:none; margin:8px 0 12px; padding:10px; border:1px solid var(--lime); border-radius:4px; color:var(--lime); background:rgba(182,255,60,.08); text-align:center; font-size:12px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; box-shadow:0 0 14px rgba(182,255,60,.16); }
+    #doneBanner.fail { border-color:var(--red); color:var(--red); background:rgba(255,51,85,.08); box-shadow:0 0 14px rgba(255,51,85,.14); }
+    #tracks { margin-top:12px; display:none; flex-direction:column; gap:5px; max-height:190px; overflow-y:auto; }
+    #tracks.visible { display:flex; }
+    .track { display:flex; align-items:center; gap:8px; padding:6px 10px; background:rgba(13,10,26,.7); border:1px solid var(--border); border-left:3px solid var(--muted); border-radius:3px; font-size:10.5px; }
+    .track[data-status="in_progress"] { border-left-color:var(--cyan); animation:pulse 1.4s ease-in-out infinite; }
+    .track[data-status="ok"] { border-left-color:var(--lime); background:linear-gradient(90deg,rgba(182,255,60,.1),rgba(13,10,26,.7) 60%); }
+    .track[data-status="fail"] { border-left-color:var(--red); background:linear-gradient(90deg,rgba(255,51,85,.1),rgba(13,10,26,.7) 60%); }
+    @keyframes pulse { 50% { box-shadow:0 0 12px rgba(0,240,255,.3); } }
+    .track .mk { flex-shrink:0; font-size:10px; color:var(--muted); width:16px; text-align:center; }
+    .track[data-status="in_progress"] .mk::before { content:">"; color:var(--cyan); }
+    .track[data-status="ok"] .mk::before { content:"✓"; color:var(--lime); }
+    .track[data-status="fail"] .mk::before { content:"✗"; color:var(--red); }
+    .track[data-status="pending"] .mk::before { content:"·"; }
+    .track .tn { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text); }
+    #status { margin-top:10px; font-size:10px; max-height:100px; overflow-y:auto; padding:8px 10px; background:rgba(7,6,15,.7); border:1px solid var(--border); border-radius:3px; line-height:1.5; color:var(--dim); white-space:pre-wrap; }
+    .footer { position:relative; z-index:2; font-size:9px; letter-spacing:1.5px; color:var(--muted); text-align:center; padding:8px 0 10px; text-transform:uppercase; }
+  </style>
+</head>
+<body>
+  <header><span class="title">SUNO // SELECT DL</span><span class="sub">SAFE WAV</span></header>
+  <main>
+    <div class="note">Suno only keeps visible rows in the page DOM. This panel starts collecting as soon as it opens: select the visible tracks, and for longer selections scroll through the selected range so every selected row becomes visible at least once.</div>
+    <div id="counter" class="empty">Collecting will start automatically</div>
+    <div class="options">
+      <button class="opt-btn on" data-key="wav">WAV</button>
+      <button class="opt-btn on" data-key="lyrics">Lyrics</button>
+      <button class="opt-btn on" data-key="image">Cover</button>
+    </div>
+    <div class="speed-row">
+      <label class="speed-label" for="batchSize">Parallel</label>
+      <select id="batchSize" aria-label="Parallel downloads">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+    </div>
+    <button class="btn scan-btn aux-btn" id="scanBtn">RESCAN</button>
+    <button class="btn scan-btn aux-btn" id="captureBtn">COLLECT MORE THAN VISIBLE</button>
+    <button class="btn scan-btn" id="refreshBtn">REFRESH SUNO</button>
+    <button class="btn scan-btn" id="clearBtn">CLEAR COLLECTED</button>
+    <button class="btn" id="dlBtn">COLLECTING SELECTION...</button>
+    <button class="btn stop-btn" id="stopBtn">STOP</button>
+    <div id="countdown"></div>
+    <div id="doneBanner"></div>
+    <div id="tracks"></div>
+    <div id="status"></div>
+  </main>
+  <div class="footer" id="ver">v0.1.0</div>
+  <script src="popup.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+

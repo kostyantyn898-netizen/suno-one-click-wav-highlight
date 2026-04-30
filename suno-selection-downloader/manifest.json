@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Suno Selection Downloader",
+  "short_name": "Suno Select DL",
+  "description": "Scan selected Suno tracks in a persistent side panel, then download WAV + lyrics + covers in a selectable 1-5 track queue.",
+  "version": "0.3.6",
+  "action": {
+    "default_icon": "icon.png",
+    "default_title": "Suno Selection Downloader"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "icons": {
+    "128": "icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "*://*.suno.com/*",
+    "https://studio-api.prod.suno.com/*",
+    "https://cdn1.suno.ai/*",
+    "https://cdn2.suno.ai/*"
+  ],
+  "permissions": [
+    "downloads",
+    "scripting",
+    "activeTab",
+    "storage",
+    "notifications",
+    "sidePanel"
+  ]
+}
+
+
+
+
+
+
+
+

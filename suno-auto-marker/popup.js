@@ -4,6 +4,7 @@ const api = (typeof browser !== 'undefined') ? browser : chrome;
 const FOLDER = 'Suno_Songs';
 const DOWNLOAD_STATE_KEY = 'sunoDownloadState';
 const LAST_BATCH_KEY = 'sunoOneClickLastBatch';
+const SETTINGS_KEY = 'sunoOneClickSettings';
 const FORMAT = 'wav';
 const PUBLIC_ONLY = false;
 
@@ -169,12 +170,27 @@ document.addEventListener('DOMContentLoaded', () => {
         try { await api.storage.local.remove([DOWNLOAD_STATE_KEY, LAST_BATCH_KEY]); } catch (e) { /* ignore */ }
     }
 
-    function getBatchCount() {
-        const raw = parseInt(batchCountInput?.value, 10);
+    function clampBatchCount(value) {
+        const raw = parseInt(value, 10);
         const count = Number.isFinite(raw) ? raw : 5;
-        const clamped = Math.max(1, Math.min(10, count));
+        return Math.max(1, Math.min(10, count));
+    }
+
+    async function saveBatchCount(value) {
+        const batchCount = clampBatchCount(value);
+        try { await api.storage.local.set({ [SETTINGS_KEY]: { batchCount } }); } catch (e) { /* ignore */ }
+        return batchCount;
+    }
+
+    function setBatchCount(value, { save = true } = {}) {
+        const clamped = clampBatchCount(value);
         if (batchCountInput) batchCountInput.value = String(clamped);
+        if (save) saveBatchCount(clamped);
         return clamped;
+    }
+
+    function getBatchCount() {
+        return setBatchCount(batchCountInput?.value);
     }
 
     async function startAuto() {
@@ -371,19 +387,28 @@ document.addEventListener('DOMContentLoaded', () => {
     if (batchCountInput) batchCountInput.addEventListener('input', getBatchCount);
     if (countMinusBtn) countMinusBtn.addEventListener('click', () => {
         const next = Math.max(1, getBatchCount() - 1);
-        if (batchCountInput) batchCountInput.value = String(next);
+        setBatchCount(next);
     });
     if (countPlusBtn) countPlusBtn.addEventListener('click', () => {
         const next = Math.min(10, getBatchCount() + 1);
-        if (batchCountInput) batchCountInput.value = String(next);
+        setBatchCount(next);
     });
 
     if (autoStartBtn) autoStartBtn.addEventListener('click', startAuto);
     if (autoStopBtn) autoStopBtn.addEventListener('click', stopAuto);
 
     try {
+        api.storage.local.get(SETTINGS_KEY, (result) => {
+            const saved = result?.[SETTINGS_KEY]?.batchCount;
+            if (saved != null) setBatchCount(saved, { save: false });
+        });
+    } catch (e) { /* ignore */ }
+    try {
         api.runtime.sendMessage({ action: 'get_auto_trash_state' }, (state) => {
             if (state?.running) setAutoRunning(true, false);
         });
     } catch (e) { /* ignore */ }
 });
+
+
+
