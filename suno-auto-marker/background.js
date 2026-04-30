@@ -375,10 +375,10 @@ async function highlightSongsOnSuno(batchSongs, highlightOptions = {}) {
                 }
             }
 
-            // Перший прохід -- те, що видно зараз.
+            // First pass: rows currently visible.
             tryRound();
 
-            // Якщо лишились незнайдені -- скролимо контейнер списку і повторюємо.
+            // If some rows are still missing, scroll the list container and retry.
             if (remaining.size > 0) {
                 usedVirtualScroll = true;
                 const scrollEl = findScrollContainer();
@@ -389,12 +389,12 @@ async function highlightSongsOnSuno(batchSongs, highlightOptions = {}) {
                     try { scrollEl.scrollTo({ top: before + step, behavior: 'auto' }); }
                     catch (e) { scrollEl.scrollTop = before + step; }
                     await new Promise(r => setTimeout(r, 420));
-                    // Якщо не змогли скролити далі -- виходимо.
+                    // Stop if the list cannot scroll further.
                     if (Math.abs(scrollEl.scrollTop - before) < 2 && scrollEl.scrollTop === lastTop) break;
                     lastTop = scrollEl.scrollTop;
                     tryRound();
                 }
-                // На завершення -- повертаємось трохи вгору, щоб користувач бачив верх списку.
+                // Finish by scrolling slightly upward so the user can see the list context.
                 try { scrollEl.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
             }
 
@@ -914,7 +914,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
         persistDownloadState({ startedAt: Date.now() });
         broadcastDownloadState();
 
-        // One-click UI: повідомити popup список треків, щоб він намалював рядки.
+        // One-click UI: send tracks to the popup so it can render rows.
         try {
             const tracks = (message.songs || []).map(s => ({
                 id: s.id,
@@ -1578,7 +1578,7 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
     }
     
     let downloadedCount = 0;
-    const successfulSongs = []; // тільки треки з успішним WAV -- передаємо у highlight
+    const successfulSongs = []; // only tracks with successful WAV downloads are highlighted
     let lyricsDownloadedCount = 0;
     let lyricsMissingCount = 0;
     let imagesDownloadedCount = 0;
@@ -1834,7 +1834,7 @@ async function downloadSelectedSongs(folderName, songs, format = 'mp3', jobId = 
     await finishDownloadState({ finishedAt: Date.now() });
 
     // One-click build: clean transient state, then keep only the last batch for re-highlighting.
-    // У highlight ідуть ТІЛЬКИ успішно завантажені WAV.
+    // Highlight only successfully downloaded WAV tracks.
     const lastBatchSongs = successfulSongs.filter(s => s && s.id).map(s => ({ id: s.id, title: s.title }));
     await clearDownloadState();
     try { await api.storage.local.set({ [LAST_BATCH_KEY]: { at: Date.now(), songs: lastBatchSongs } }); } catch (e) { /* ignore */ }
@@ -1862,6 +1862,7 @@ function logToPopup(text) {
     appendAutoTrashDebug(String(text || ''));
     try { api.runtime.sendMessage({ action: "log", text: text }); } catch (e) {}
 }
+
 
 
 

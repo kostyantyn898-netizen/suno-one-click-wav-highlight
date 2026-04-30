@@ -1,9 +1,13 @@
-.DS_Store
-Thumbs.db
+# Release/build output
 *.zip
-*.crx
-*.pem
-node_modules/
-dist/
-build/
-__pycache__/
+
+# Local experiments and working notes
+_old/
+suno-wav-auto-marker-v1.5.0/
+suno-selection-downloader-v0.1/
+suno-selection-downloader-simple-v0.1/
+*.har
+*CLAUDE*.txt
+ВІДПОВІДЬ*.txt
+ЗАУВАЖЕННЯ*.txt
+ПИТАННЯ*.txt
