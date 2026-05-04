@@ -1,17 +1,10 @@
 # Changelog
 
-## v1.6.0
+## v1.7.0
 
-- Publish two clean extension folders in one repository.
-- Add Suno WAV Auto Marker v1.5.1.
-- Add Suno Selection Downloader v0.3.6.
-- Use English-only public UI and documentation.
-- Package release ZIPs separately for each workflow.
-
-## Suno WAV Auto Marker v1.5.1
-
-- Remember the selected 1-10 batch size between popup opens.
-- Keep WAV, lyrics, cover downloads and marker workflow.
+- Make Suno Selection Downloader the only maintained public tool on `main`.
+- Move the experimental Auto Marker out of the main branch.
+- Clarify the required workflow for Suno virtual scrolling: keep the panel open and slowly scroll selected tracks into view.
 
 ## Suno Selection Downloader v0.3.6
 
@@ -20,3 +13,12 @@
 - Remove startup countdown.
 - Add optional `REFRESH SUNO` button.
 - Explain Suno virtual scrolling behavior in the UI.
+
+## v1.6.0
+
+- Published two clean extension folders in one repository.
+- Added Suno WAV Auto Marker v1.5.1.
+- Added Suno Selection Downloader v0.3.6.
+- Used English-only public UI and documentation.
+
+Auto Marker is now archived as experimental because it proved unreliable in real Suno workflows.
