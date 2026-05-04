@@ -279,7 +279,6 @@ async function highlightSongsOnSuno(batchSongs, highlightOptions = {}) {
             ensureStyle();
 
             const highlighted = [];
-            let usedVirtualScroll = false;
             const used = new Set();
             const remaining = new Set(songs.map((_, i) => i));
 
@@ -300,19 +299,6 @@ async function highlightSongsOnSuno(batchSongs, highlightOptions = {}) {
                 }
             }
 
-            function findScrollContainer() {
-                const main = document.querySelector('main');
-                if (main && main.scrollHeight > main.clientHeight + 10) return main;
-                const cands = document.querySelectorAll('div, section, main, article');
-                for (const el of cands) {
-                    if (!el.scrollHeight || el.scrollHeight <= el.clientHeight + 10) continue;
-                    let cs;
-                    try { cs = getComputedStyle(el); } catch (e) { continue; }
-                    if (cs.overflowY === 'auto' || cs.overflowY === 'scroll') return el;
-                }
-                return document.scrollingElement || document.documentElement;
-            }
-
             function getDomOrderedCards(cards) {
                 return Array.from(new Set(cards.filter(Boolean))).sort((a, b) => {
                     if (a === b) return 0;
@@ -323,9 +309,41 @@ async function highlightSongsOnSuno(batchSongs, highlightOptions = {}) {
                 });
             }
 
+            function isVisibleCard(card) {
+                const r = card?.getBoundingClientRect?.();
+                if (!r || r.width < 180 || r.height < 40) return false;
+                return r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+            }
+
+            function findTopVisibleCards(limit) {
+                const selectors = [
+                    '.clip-row',
+                    '[data-clip-status]',
+                    '[role="group"][aria-label]',
+                    '[role="listitem"]',
+                    'article'
+                ].join(',');
+                const candidates = [];
+                try {
+                    document.querySelectorAll(selectors).forEach(el => {
+                        const card = findCard(el);
+                        if (!card || card.classList?.contains(HIGHLIGHT_CLASS)) return;
+                        if (!isVisibleCard(card)) return;
+                        candidates.push(card);
+                    });
+                } catch (e) {}
+
+                return Array.from(new Set(candidates))
+                    .sort((a, b) => {
+                        const ar = a.getBoundingClientRect();
+                        const br = b.getBoundingClientRect();
+                        if (Math.abs(ar.top - br.top) > 4) return ar.top - br.top;
+                        return ar.left - br.left;
+                    })
+                    .slice(0, Math.max(0, limit || 0));
+            }
             function clickLikeUser(el, shiftKey) {
                 if (!el) return false;
-                try { el.scrollIntoView({ behavior: 'auto', block: 'center' }); } catch (e) {}
                 const rect = el.getBoundingClientRect?.();
                 if (!rect || rect.width < 1 || rect.height < 1) return false;
 
@@ -353,6 +371,58 @@ async function highlightSongsOnSuno(batchSongs, highlightOptions = {}) {
                 return true;
             }
 
+
+            function findSelectButton(card) {
+                if (!card?.querySelector) return null;
+                return card.querySelector('.multi-select-button button[aria-label="Select clip"], button[aria-label="Select clip"]');
+            }
+
+            function findDeselectButton(card) {
+                if (!card?.querySelector) return null;
+                return card.querySelector('.multi-select-button button[aria-label="Deselect clip"], button[aria-label="Deselect clip"]');
+            }
+
+            function clickButtonLikeUser(button) {
+                if (!button) return false;
+                const rect = button.getBoundingClientRect?.();
+                if (!rect || rect.width < 1 || rect.height < 1) return false;
+                const x = Math.max(1, Math.min(window.innerWidth - 2, rect.left + rect.width / 2));
+                const y = Math.max(1, Math.min(window.innerHeight - 2, rect.top + rect.height / 2));
+                const eventInit = {
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true,
+                    view: window,
+                    button: 0,
+                    buttons: 1,
+                    clientX: x,
+                    clientY: y
+                };
+                for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+                    const EventCtor = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+                    button.dispatchEvent(new EventCtor(type, eventInit));
+                }
+                return true;
+            }
+
+            async function selectCardsIndividually(cards) {
+                let selected = 0;
+                let clicked = 0;
+                for (const card of getDomOrderedCards(cards)) {
+                    if (findDeselectButton(card)) {
+                        selected++;
+                        continue;
+                    }
+                    const button = findSelectButton(card);
+                    if (!button) continue;
+                    if (clickButtonLikeUser(button)) {
+                        clicked++;
+                        await new Promise(r => setTimeout(r, 90));
+                        selected += findDeselectButton(card) ? 1 : 0;
+                    }
+                }
+                return { attempted: true, selected, clicked, mode: 'individual_buttons' };
+            }
             async function tryShiftSelectRange(cards) {
                 const ordered = getDomOrderedCards(cards);
                 if (!ordered.length) return { attempted: false, selected: 0, error: 'no_cards' };
@@ -375,46 +445,36 @@ async function highlightSongsOnSuno(batchSongs, highlightOptions = {}) {
                 }
             }
 
-            // First pass: rows currently visible.
-            tryRound();
-
-            // If some rows are still missing, scroll the list container and retry.
-            if (remaining.size > 0) {
-                usedVirtualScroll = true;
-                const scrollEl = findScrollContainer();
-                let lastTop = -1;
-                for (let attempt = 0; attempt < 14 && remaining.size > 0; attempt++) {
-                    const before = scrollEl.scrollTop;
-                    const step = Math.max(240, scrollEl.clientHeight * 0.8);
-                    try { scrollEl.scrollTo({ top: before + step, behavior: 'auto' }); }
-                    catch (e) { scrollEl.scrollTop = before + step; }
-                    await new Promise(r => setTimeout(r, 420));
-                    // Stop if the list cannot scroll further.
-                    if (Math.abs(scrollEl.scrollTop - before) < 2 && scrollEl.scrollTop === lastTop) break;
-                    lastTop = scrollEl.scrollTop;
-                    tryRound();
-                }
-                // Finish by scrolling slightly upward so the user can see the list context.
-                try { scrollEl.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+            if (options.topVisible) {
+                const topCards = findTopVisibleCards(songs.length);
+                topCards.forEach((card, idx) => {
+                    const song = songs[idx] || songs[0] || { id: String(idx + 1), title: 'Downloaded' };
+                    if (markCard(card, song)) highlighted.push(card);
+                    remaining.delete(idx);
+                });
+            } else {
+                // First pass: rows currently visible.
+                tryRound();
             }
 
-            const canShiftSelect = songs.length <= 16 && !usedVirtualScroll;
-            const selection = canShiftSelect
-                ? await tryShiftSelectRange(highlighted)
-                : { attempted: false, selected: 0, error: usedVirtualScroll ? 'virtual_scroll_skip' : 'batch_too_large' };
+            const canShiftSelect = songs.length <= 16 && highlighted.length === songs.length;
+            const selection = options.topVisible && highlighted.length
+                ? await selectCardsIndividually(highlighted)
+                : (canShiftSelect
+                    ? await tryShiftSelectRange(highlighted)
+                    : { attempted: false, selected: 0, error: highlighted.length < songs.length ? 'not_visible' : 'batch_too_large' });
 
             const toast = document.createElement('div');
             toast.id = 'suno-oneclick-toast';
             const titles = songs.map(s => '• ' + (s.title || s.id || 'untitled')).join('<br>');
             toast.innerHTML = highlighted.length
                 ? '<b>Suno One-Click:</b> marked ' + highlighted.length + ' downloaded card(s) for trash.'
-                    + (selection.selected ? '<br><b>Experiment:</b> shift-clicked ' + selection.selected + ' card(s).' : (!canShiftSelect && usedVirtualScroll ? '<br><b>Experiment:</b> skipped shift-select after virtual scroll.' : (!canShiftSelect ? '<br><b>Experiment:</b> skipped shift-select for large batch.' : '<br><b>Experiment:</b> shift-select fallback only.')))
+                    + (selection.selected ? '<br><b>Selection:</b> selected ' + selection.selected + ' card(s).' : (!canShiftSelect && highlighted.length < songs.length ? '<br><b>Note:</b> only visible cards were marked; no page scrolling was used.' : (!canShiftSelect ? '<br><b>Experiment:</b> skipped shift-select for large batch.' : '<br><b>Experiment:</b> shift-select fallback only.')))
                     + '<br><br>' + titles
                 : '<b>Suno One-Click:</b> last batch saved, but visible cards were not found.<br>Open the Suno list that contains them.<br><br>' + titles;
             document.body.appendChild(toast);
             setTimeout(() => { try { toast.remove(); } catch (e) {} }, 16000);
 
-            if (highlighted[0]) highlighted[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
             return { highlighted: highlighted.length, selected: selection.selected || 0, selection };
         },
         args: [songs, highlightOptions]
@@ -477,6 +537,42 @@ async function getSunoAuthToken() {
     return { token, tabId: tab.id };
 }
 
+function isStemClipForAutoMarker(clip) {
+    if (!clip || typeof clip !== 'object') return false;
+    if (clip.is_stem === true || clip.stem_of || clip.stem_of_id || clip.stem_of_clip_id) return true;
+
+    const values = [
+        clip.type,
+        clip.clip_type,
+        clip.generation_type,
+        clip.generation_mode,
+        clip.source,
+        clip.variant,
+        clip.metadata?.type,
+        clip.metadata?.clip_type,
+        clip.metadata?.generation_type,
+        clip.metadata?.source,
+        clip.meta?.type,
+        clip.meta?.clip_type,
+        clip.meta?.source
+    ];
+
+    for (const value of values) {
+        if (typeof value === 'string' && value.toLowerCase().includes('stem')) return true;
+    }
+
+    const nested = [clip.metadata, clip.meta, clip.generation, clip.source_clip, clip.parent_clip];
+    for (const obj of nested) {
+        if (!obj || typeof obj !== 'object') continue;
+        if (obj.is_stem === true || obj.stem === true || obj.stem_of || obj.stem_of_id) return true;
+        for (const value of Object.values(obj)) {
+            if (typeof value === 'string' && value.toLowerCase().includes('stem')) return true;
+        }
+    }
+
+    if (Array.isArray(clip.tags) && clip.tags.some(t => typeof t === 'string' && t.toLowerCase().includes('stem'))) return true;
+    return typeof clip.title === 'string' && /\bstem(s)?\b/i.test(clip.title);
+}
 async function fetchLatestSongForAutoTrash(excludeIds = new Set()) {
     appendAutoTrashDebug('feed: start');
     const auth = await getSunoAuthToken();
@@ -522,7 +618,9 @@ async function fetchLatestSongForAutoTrash(excludeIds = new Set()) {
         const clips = Array.isArray(data?.clips) ? data.clips : [];
         appendAutoTrashDebug('feed: page ' + page + ' got ' + clips.length + ' clips, excluding ' + excludeIds.size + ' already processed');
 
-        const clip = clips.find(c => c?.id && !c?.is_trashed && !c?.trashed && !excludeIds.has(c.id));
+        const skippedStems = clips.filter(c => c?.id && !c?.is_trashed && !c?.trashed && !excludeIds.has(c.id) && isStemClipForAutoMarker(c)).length;
+        if (skippedStems) appendAutoTrashDebug('feed: skipped ' + skippedStems + ' stem clip(s)');
+        const clip = clips.find(c => c?.id && !c?.is_trashed && !c?.trashed && !excludeIds.has(c.id) && !isStemClipForAutoMarker(c));
         appendAutoTrashDebug(clip?.id ? ('feed: selected ' + clip.id + ' from page ' + page) : ('feed: no selectable clip on page ' + page));
         if (clip) {
             return {
@@ -724,7 +822,7 @@ async function runAutoTrashLoop(options = {}) {
 
         let markedForManualDelete = false;
         try {
-            const highlightResult = await highlightSongsOnSuno(successfulBatch, { preserveOld: true, badgeText: 'READY' });
+            const highlightResult = await highlightSongsOnSuno(successfulBatch, { preserveOld: true, badgeText: 'READY', topVisible: true });
             if (highlightResult?.selected) {
                 markedForManualDelete = true;
                 logToPopup(`✅ Custom AUTO selected ${highlightResult.selected} card(s). Ready for manual delete.`);
@@ -1862,6 +1960,11 @@ function logToPopup(text) {
     appendAutoTrashDebug(String(text || ''));
     try { api.runtime.sendMessage({ action: "log", text: text }); } catch (e) {}
 }
+
+
+
+
+
 
 
 
