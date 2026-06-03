@@ -1,0 +1,375 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Suno One-Click WAV + Highlight</title>
+    <style>
+      :root {
+        --bg-0: #07060f;
+        --bg-1: #0d0a1a;
+        --bg-2: #131129;
+        --grid: rgba(0, 240, 255, 0.06);
+        --neon-cyan: #00f0ff;
+        --neon-magenta: #ff2bd6;
+        --neon-lime: #b6ff3c;
+        --neon-red: #ff3355;
+        --neon-yellow: #f7d048;
+        --text: #e7e9ff;
+        --text-dim: #8a8eb0;
+        --text-muted: #5a5d7a;
+        --border: #1f1c3d;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body { width: 360px; }
+
+      body {
+        font-family: "Fira Code", "JetBrains Mono", "Consolas", "Courier New", monospace;
+        background: radial-gradient(ellipse at top, #1a1240 0%, var(--bg-0) 70%);
+        color: var(--text);
+        position: relative;
+        overflow: hidden;
+      }
+
+      body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 24px 24px;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      header {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px 10px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, rgba(0,240,255,0.05) 0%, transparent 100%);
+      }
+
+      header .logo {
+        width: 22px;
+        height: 22px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 6px var(--neon-cyan));
+      }
+
+      header .title {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--neon-cyan);
+        text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+      }
+
+      header .subtitle {
+        font-size: 10px;
+        letter-spacing: 1px;
+        color: var(--neon-magenta);
+        margin-left: auto;
+        text-shadow: 0 0 6px rgba(255, 43, 214, 0.5);
+      }
+
+      main {
+        position: relative;
+        z-index: 2;
+        padding: 14px;
+        background: linear-gradient(180deg, transparent 0%, rgba(13, 10, 26, 0.65) 100%);
+      }
+
+      .note {
+        font-size: 10.5px;
+        line-height: 1.5;
+        letter-spacing: 0.3px;
+        color: var(--text-dim);
+        background: rgba(0, 240, 255, 0.05);
+        padding: 8px 10px;
+        border-left: 2px solid var(--neon-cyan);
+        margin-bottom: 12px;
+      }
+
+      .note b { color: var(--neon-cyan); }
+
+      .go-btn {
+        width: 100%;
+        padding: 12px 16px;
+        cursor: pointer;
+        border: 1px solid var(--neon-cyan);
+        background: linear-gradient(135deg, rgba(0,240,255,0.12) 0%, rgba(255,43,214,0.12) 100%);
+        color: var(--neon-cyan);
+        font-family: inherit;
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        border-radius: 4px;
+        text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+        box-shadow:
+          0 0 0 1px rgba(0, 240, 255, 0.15),
+          0 0 18px rgba(0, 240, 255, 0.25),
+          inset 0 0 12px rgba(0, 240, 255, 0.08);
+        transition: all 0.18s ease;
+      }
+
+      .go-btn:hover:not(:disabled) {
+        color: var(--bg-0);
+        background: linear-gradient(135deg, var(--neon-cyan) 0%, var(--neon-magenta) 100%);
+        text-shadow: none;
+        box-shadow:
+          0 0 0 1px var(--neon-cyan),
+          0 0 24px rgba(0, 240, 255, 0.7),
+          0 0 36px rgba(255, 43, 214, 0.4);
+      }
+
+      .go-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        animation: pulse-glow 1.6s ease-in-out infinite;
+      }
+
+      @keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 0 1px rgba(0,240,255,0.15), 0 0 18px rgba(0,240,255,0.2); }
+        50%      { box-shadow: 0 0 0 1px rgba(255,43,214,0.25), 0 0 22px rgba(255,43,214,0.4); }
+      }
+
+      .go-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .go-row .go-btn {
+        flex: 1;
+        padding: 14px 6px;
+        font-size: 16px;
+        letter-spacing: 1px;
+      }
+
+      .auto-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .auto-row .go-btn {
+        flex: 1;
+        padding: 11px 8px;
+        font-size: 11px;
+        letter-spacing: 1px;
+      }
+
+      #autoCounter {
+        display: none;
+        margin-top: 10px;
+        padding: 9px 10px;
+        border: 1px solid rgba(0, 240, 255, 0.45);
+        background: linear-gradient(90deg, rgba(0,240,255,0.10) 0%, rgba(182,255,60,0.08) 100%);
+        color: var(--neon-cyan);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        text-align: center;
+        box-shadow: 0 0 12px rgba(0,240,255,0.14), inset 0 0 10px rgba(0,240,255,0.04);
+      }
+
+      #autoStartBtn {
+        border-color: var(--neon-lime);
+        color: var(--neon-lime);
+        background: linear-gradient(135deg, rgba(182,255,60,0.12) 0%, rgba(0,240,255,0.08) 100%);
+      }
+
+      #autoStopBtn {
+        border-color: var(--neon-red);
+        color: var(--neon-red);
+        background: linear-gradient(135deg, rgba(255,51,85,0.14) 0%, rgba(255,43,214,0.08) 100%);
+      }
+      #tracks {
+        margin-top: 14px;
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      #tracks.visible { display: flex; }
+
+      .track {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        background: rgba(13, 10, 26, 0.7);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--text-muted);
+        border-radius: 3px;
+        font-size: 11px;
+        line-height: 1.3;
+        transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
+      }
+
+      .track[data-status="pending"]   { border-left-color: var(--text-muted); }
+
+      .track[data-status="in_progress"] {
+        border-left-color: var(--neon-cyan);
+        animation: track-pulse 1.4s ease-in-out infinite;
+      }
+
+      @keyframes track-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(0,240,255,0); inset 0 0 0 0 rgba(0,240,255,0); }
+        50%      { box-shadow: 0 0 14px rgba(0,240,255,0.25); }
+      }
+
+      .track[data-status="ok"] {
+        border-left-color: var(--neon-lime);
+        background: linear-gradient(90deg, rgba(182,255,60,0.10) 0%, rgba(13,10,26,0.7) 60%);
+        box-shadow: 0 0 12px rgba(182,255,60,0.18), inset 0 0 10px rgba(182,255,60,0.04);
+      }
+
+      .track[data-status="fail"] {
+        border-left-color: var(--neon-red);
+        background: linear-gradient(90deg, rgba(255,51,85,0.12) 0%, rgba(13,10,26,0.7) 60%);
+        box-shadow: 0 0 12px rgba(255,51,85,0.22), inset 0 0 10px rgba(255,51,85,0.04);
+      }
+
+      .track .marker {
+        flex-shrink: 0;
+        width: 14px;
+        height: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        line-height: 1;
+        color: var(--text-muted);
+      }
+
+      .track[data-status="pending"]      .marker::before { content: "."; font-size: 18px; line-height: 0; color: var(--text-muted); }
+      .track[data-status="in_progress"]  .marker::before { content: ">"; color: var(--neon-cyan); text-shadow: 0 0 6px var(--neon-cyan); }
+      .track[data-status="ok"]           .marker::before { content: "OK"; font-size: 9px; color: var(--neon-lime); text-shadow: 0 0 8px var(--neon-lime); font-weight: bold; }
+      .track[data-status="fail"]         .marker::before { content: "X"; color: var(--neon-red); text-shadow: 0 0 8px var(--neon-red); font-weight: bold; }
+
+      .track .title {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--text);
+        letter-spacing: 0.3px;
+      }
+
+      .track[data-status="ok"]   .title { color: var(--neon-lime); text-shadow: 0 0 6px rgba(182,255,60,0.4); }
+      .track[data-status="fail"] .title { color: var(--neon-red);  text-shadow: 0 0 6px rgba(255,51,85,0.4); }
+
+      #summary {
+        margin-top: 12px;
+        padding: 8px 10px;
+        font-size: 11px;
+        letter-spacing: 0.4px;
+        color: var(--text-dim);
+        background: rgba(13, 10, 26, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        display: none;
+        text-align: center;
+      }
+
+      #summary.success {
+        color: var(--neon-lime);
+        border-color: var(--neon-lime);
+        text-shadow: 0 0 8px rgba(182,255,60,0.6);
+        box-shadow: 0 0 16px rgba(182,255,60,0.18);
+        display: block;
+      }
+
+      #summary.partial {
+        color: var(--neon-yellow);
+        border-color: var(--neon-yellow);
+        text-shadow: 0 0 8px rgba(247,208,72,0.5);
+        box-shadow: 0 0 14px rgba(247,208,72,0.18);
+        display: block;
+      }
+
+      #summary.fail {
+        color: var(--neon-red);
+        border-color: var(--neon-red);
+        text-shadow: 0 0 8px rgba(255,51,85,0.5);
+        box-shadow: 0 0 16px rgba(255,51,85,0.2);
+        display: block;
+      }
+
+      #status {
+        margin-top: 10px;
+        font-size: 10.5px;
+        max-height: 110px;
+        overflow-y: auto;
+        padding: 8px 10px;
+        background: rgba(7, 6, 15, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        line-height: 1.45;
+        color: var(--text-dim);
+        white-space: pre-wrap;
+      }
+
+      #status::-webkit-scrollbar { width: 5px; }
+      #status::-webkit-scrollbar-track { background: transparent; }
+      #status::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+      #status::-webkit-scrollbar-thumb:hover { background: var(--neon-cyan); }
+
+      .footer {
+        position: relative;
+        z-index: 2;
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        color: var(--text-muted);
+        text-align: center;
+        padding: 8px 10px 10px;
+        user-select: none;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="SunoDownloader.png" alt="" class="logo" />
+      <span class="title">SUNO // ONE-CLICK</span>
+      <span class="subtitle">WAV</span>
+    </header>
+
+    <main>
+      <div class="note">
+Open <b>suno.com</b>, stay logged in. Manual: 1 / 6 / 16. Auto: one track every 5 seconds -> mark for manual delete. Do not scroll Suno while AUTO runs.
+      </div>
+
+      <div class="go-row">
+        <button class="go-btn" data-count="1">1</button>
+        <button class="go-btn" data-count="6">6</button>
+        <button class="go-btn" data-count="16">16</button>
+      </div>
+
+      <div class="auto-row">
+        <button id="autoStartBtn" class="go-btn">AUTO</button>
+        <button id="autoStopBtn" class="go-btn" disabled>STOP</button>
+      </div>
+      <div id="autoCounter" aria-live="polite">AUTO // 0 MARKED</div>
+      <div id="tracks" aria-live="polite"></div>
+
+      <div id="summary" role="status"></div>
+
+      <div id="status" role="log" aria-live="polite"></div>
+    </main>
+
+    <div id="versionFooter" class="footer">v?</div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
+
