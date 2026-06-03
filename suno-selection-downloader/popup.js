@@ -4,19 +4,16 @@ const api = (typeof browser !== 'undefined') ? browser : chrome;
 const counterDiv = document.getElementById('counter');
 const scanBtn = document.getElementById('scanBtn');
 const captureBtn = document.getElementById('captureBtn');
-const clearBtn = document.getElementById('clearBtn');
-const refreshBtn = document.getElementById('refreshBtn');
 const dlBtn = document.getElementById('dlBtn');
 const stopBtn = document.getElementById('stopBtn');
 const tracksDiv = document.getElementById('tracks');
 const statusDiv = document.getElementById('status');
 const verEl = document.getElementById('ver');
 const countdownDiv = document.getElementById('countdown');
-const doneBanner = document.getElementById('doneBanner');
 const batchSizeSelect = document.getElementById('batchSize');
 const SETTINGS_KEY = 'sunoSimpleDlSettings';
 
-try { verEl.textContent = 'v' + (api.runtime.getManifest()?.version || '?'); } catch (e) {}
+try { if (verEl) verEl.textContent = 'v' + (api.runtime.getManifest()?.version || '?'); } catch (e) {}
 
 const opts = { wav: true, lyrics: true, image: true };
 
@@ -43,13 +40,7 @@ if (batchSizeSelect) {
     } catch (e) {}
 }
 
-document.querySelectorAll('.opt-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const key = btn.dataset.key;
-        opts[key] = !opts[key];
-        btn.classList.toggle('on', opts[key]);
-    });
-});
+// Always download WAV + lyrics + cover; no per-type toggle.
 
 let isDownloading = false;
 let clips = [];
@@ -57,15 +48,10 @@ let collectedIds = new Set();
 let countdownRunning = false;
 let collecting = false;
 let collectTimer = null;
+let downloadedIds = new Set();
 
 function log(text) { statusDiv.innerText = text + '\n' + statusDiv.innerText; }
 
-function showDoneBanner(text, failed = false) {
-    doneBanner.textContent = text;
-    doneBanner.classList.toggle('fail', !!failed);
-    doneBanner.style.display = 'block';
-}
-function hideDoneBanner() { doneBanner.style.display = 'none'; doneBanner.classList.remove('fail'); }
 function setCaptureUi(on) {
     collecting = on;
     captureBtn.textContent = on ? 'STOP COLLECTING' : 'COLLECT MORE THAN VISIBLE';
@@ -125,8 +111,6 @@ function setDownloading(on) {
     captureBtn.style.display = 'none';
     scanBtn.disabled = true;
     captureBtn.disabled = true;
-    clearBtn.disabled = on || countdownRunning;
-    if (refreshBtn) refreshBtn.disabled = on || countdownRunning;
     dlBtn.disabled = on || countdownRunning;
     stopBtn.style.display = on || countdownRunning ? 'block' : 'none';
     dlBtn.style.display = on ? 'none' : 'block';
@@ -136,7 +120,7 @@ function setDownloading(on) {
 function mergeClips(found) {
     let added = 0;
     for (const clip of found || []) {
-        if (!clip?.id || collectedIds.has(clip.id)) continue;
+        if (!clip?.id || collectedIds.has(clip.id) || downloadedIds.has(clip.id)) continue;
         collectedIds.add(clip.id);
         clips.push({ id: clip.id, title: clip.title });
         added++;
@@ -156,10 +140,10 @@ async function scanVisible() {
 }
 
 async function scanSelection({ quiet = false } = {}) {
-    if (!quiet) { statusDiv.innerText = ''; hideDoneBanner(); }
+    if (!quiet) statusDiv.innerText = '';
     setCounter(0, 'Scanning selection...');
     try {
-        const found = await scanVisible();
+        const found = (await scanVisible()).filter(c => !downloadedIds.has(c.id));
         collectedIds = new Set(found.map(c => c.id));
         renderTracks(found);
         if (found.length) {
@@ -184,12 +168,11 @@ async function collectTick() {
     try { mergeClips(await scanVisible()); } catch (e) { log('❌ Collect scan error: ' + (e?.message || e)); }
 }
 
-function startCollecting() {
-    hideDoneBanner();
+function startCollecting({ keepBanner = false } = {}) {
     clips = [];
     collectedIds = new Set();
     renderTracks([]);
-    setCounter(0, 'Select tracks on Suno...');
+    if (!keepBanner) setCounter(0, 'Select tracks on Suno...');
     setCaptureUi(true);
     log('Collection started automatically. Select and scroll tracks on Suno; this panel will collect every selected row it sees.');
     collectTick();
@@ -223,26 +206,15 @@ async function countdown(seconds = 3) {
 
 scanBtn.addEventListener('click', () => scanSelection());
 captureBtn.addEventListener('click', () => collecting ? stopCollecting() : startCollecting());
-clearBtn.addEventListener('click', () => {
+function clearCollection(message, { keepBanner = false } = {}) {
     if (collecting) stopCollecting();
     clips = [];
     collectedIds = new Set();
     renderTracks([]);
-    setCounter(0, 'Collected list cleared');
-    log('Collected list cleared. Collection restarted.');
-    startCollecting();
-});
-
-if (refreshBtn) refreshBtn.addEventListener('click', async () => {
-    if (collecting) stopCollecting();
-    clips = [];
-    collectedIds = new Set();
-    renderTracks([]);
-    setCounter(0, 'Refreshing Suno...');
-    log('Refreshing the Suno tab. Collection will restart after the page reloads.');
-    try { await api.runtime.sendMessage({ action: 'refresh_suno' }); } catch (e) { log('Refresh error: ' + (e?.message || e)); }
-    setTimeout(() => startCollecting(), 2500);
-});
+    if (!keepBanner) setCounter(0, 'Collected list cleared');
+    if (message) log(message);
+    startCollecting({ keepBanner });
+}
 
 dlBtn.addEventListener('click', async () => {
     if (!clips.length) {
@@ -251,7 +223,6 @@ dlBtn.addEventListener('click', async () => {
     }
     if (collecting) stopCollecting();
     statusDiv.innerText = '';
-    hideDoneBanner();
     if (!clips.length) return;
     const batchSize = getBatchSize();
     log('Starting now: ' + clips.length + ' tracks, up to ' + batchSize + ' in parallel.');
@@ -287,15 +258,21 @@ api.runtime.onMessage.addListener((msg) => {
         renderTracks([]);
         setCounter(0, 'No selected tracks found');
     }
-    if (msg.action === 'track_progress') setTrackStatus(msg.id, msg.status, msg.error);
+    if (msg.action === 'track_progress') {
+        setTrackStatus(msg.id, msg.status, msg.error);
+        if (msg.status === 'ok') downloadedIds.add(msg.id);
+        else if (msg.status === 'fail') downloadedIds.delete(msg.id);
+    }
     if (msg.action === 'download_complete') {
         setDownloading(false);
-        const failed = !!msg.failCount;
         const text = msg.stopped
             ? ('Stopped: ' + msg.okCount + ' ok' + (msg.failCount ? ', ' + msg.failCount + ' errors' : ''))
             : ('Done: ' + msg.okCount + ' ok' + (msg.failCount ? ', ' + msg.failCount + ' errors' : ''));
-        showDoneBanner(text, failed);
+        setCounter(msg.okCount || 1, text);
         log('✅ ' + text + '.');
+        if (!msg.stopped) {
+            clearCollection('Auto-cleared after download. Monitoring selection again.', { keepBanner: true });
+        }
     }
 });
 
@@ -308,5 +285,3 @@ api.runtime.onMessage.addListener((msg) => {
     setDownloading(false);
     if (!isDownloading) startCollecting();
 })();
-
-

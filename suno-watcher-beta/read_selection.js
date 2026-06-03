@@ -1,4 +1,4 @@
-// read_selection.js - Suno Selection Downloader fallback scanner
+// read_selection.js - Suno Watcher Beta fallback scanner
 (function readSunoSelection() {
 
     // Find all selection buttons confirmed from HAR/DOM inspection.
