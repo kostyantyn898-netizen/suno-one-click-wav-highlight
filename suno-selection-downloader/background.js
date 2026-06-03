@@ -8,8 +8,10 @@ let activeDownloadIds = new Set();
 
 const FOLDER = 'Suno_Songs';
 const INTER_TRACK_DELAY_MS = 0;
-const NOTIFY_ICON = 'icon128.png';
 const DOWNLOAD_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+const PANEL_PATH = api.runtime.getManifest()?.side_panel?.default_path || '';
+const ASSET_PREFIX = PANEL_PATH.includes('/') ? PANEL_PATH.slice(0, PANEL_PATH.lastIndexOf('/') + 1) : '';
+const NOTIFY_ICON = `${ASSET_PREFIX}icon128.png`;
 
 try {
     api.runtime.onInstalled.addListener(() => {
@@ -125,7 +127,7 @@ async function downloadText(text, filename, tabId) {
 }
 
 async function readSelectionFromPage(tabId) {
-    const results = await api.scripting.executeScript({ target: { tabId }, files: ['read_selection.js'] });
+    const results = await api.scripting.executeScript({ target: { tabId }, files: [`${ASSET_PREFIX}read_selection.js`] });
     return results?.[0]?.result || { clips: [], count: 0 };
 }
 
