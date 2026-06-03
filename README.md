@@ -25,6 +25,9 @@ Suno uses a virtual scrolling list: only the rows currently visible on screen ex
 6. Select the unzipped `suno-selection-downloader` folder.
 7. Open `suno.com` and stay logged in.
 
+For this local development checkout, Chrome can load either the repository root
+`suno-one-click-wav-highlight` or the inner `suno-selection-downloader` folder.
+
 ## Recommended Workflow
 
 1. Open your Suno library.
