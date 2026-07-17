@@ -20,7 +20,6 @@
   "host_permissions": [
     "*://*.suno.com/*",
     "https://studio-api.prod.suno.com/*",
-    "https://*.suno.ai/*",
     "https://cdn1.suno.ai/*",
     "https://cdn2.suno.ai/*"
   ],
