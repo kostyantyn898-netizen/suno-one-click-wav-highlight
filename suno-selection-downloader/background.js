@@ -334,11 +334,16 @@ function extractImageUrl(data) {
         data.metadata?.image,
         data.metadata?.cover_url,
         data.metadata?.cover_image_url,
+        data.metadata?.artwork_url,
+        data.metadata?.image_hd_url,
+        data.metadata?.image_4k_url,
+        data.metadata?.image_original_url,
         data.meta?.image_url,
         data.meta?.image_large_url,
         data.meta?.image,
         data.meta?.cover_url,
         data.meta?.cover_image_url,
+        data.meta?.artwork_url,
         data.clip?.image_url,
         data.clip?.image_large_url,
         data.clip?.image,
@@ -348,7 +353,22 @@ function extractImageUrl(data) {
         data.generation?.image_large_url,
         data.generation?.image,
         data.generation?.cover_url,
-        data.generation?.cover_image_url
+        data.generation?.cover_image_url,
+        data.raw?.image_large_url,
+        data.raw?.cover_image_url,
+        data.raw?.image_url,
+        data.raw?.cover_url,
+        data.raw?.image,
+        data.raw?.artwork_url,
+        data.raw?.metadata?.image_url,
+        data.raw?.metadata?.image_large_url,
+        data.raw?.metadata?.image,
+        data.raw?.metadata?.cover_url,
+        data.raw?.metadata?.cover_image_url,
+        data.raw?.metadata?.artwork_url,
+        data.raw?.metadata?.image_hd_url,
+        data.raw?.metadata?.image_4k_url,
+        data.raw?.metadata?.image_original_url
     ];
     let bestUrl = null;
     let bestScore = -999;
@@ -447,6 +467,10 @@ async function downloadSelected(options = {}) {
             let meta = null;
             if (dlLyrics || dlImage) {
                 meta = clip.lyrics || clip.image_url || clip.metadata ? clip : await fetchClipMeta(clip.id, token, tab.id);
+                if (dlImage && (!meta || !extractImageUrl(meta))) {
+                    const imageMeta = await fetchClipMeta(clip.id, token, tab.id);
+                    if (imageMeta) meta = { ...(meta || {}), ...imageMeta, title: title || imageMeta.title };
+                }
                 if (!meta) log('⚠️ Metadata not found: ' + title);
             }
 
