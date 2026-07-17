@@ -169,6 +169,10 @@ async function fetchClipMeta(clipId, token, tabId) {
         world: 'MAIN',
         func: async (id, authToken) => {
             const endpoints = [
+                `https://studio-api.prod.suno.com/api/clip/${id}`,
+                `https://studio-api.prod.suno.com/api/clip/${id}/`,
+                `https://studio-api-prod.suno.com/api/clip/${id}`,
+                `https://studio-api-prod.suno.com/api/clip/${id}/`,
                 `https://studio-api.prod.suno.com/api/gen/${id}/`,
                 `https://studio-api.prod.suno.com/api/gen/${id}`,
                 `https://studio-api.prod.suno.com/api/gen/${id}/metadata/`,
@@ -467,9 +471,11 @@ async function downloadSelected(options = {}) {
             let meta = null;
             if (dlLyrics || dlImage) {
                 meta = clip.lyrics || clip.image_url || clip.metadata ? clip : await fetchClipMeta(clip.id, token, tab.id);
-                if (dlImage && (!meta || !extractImageUrl(meta))) {
-                    const imageMeta = await fetchClipMeta(clip.id, token, tab.id);
-                    if (imageMeta) meta = { ...(meta || {}), ...imageMeta, title: title || imageMeta.title };
+                const needsLyrics = dlLyrics && (!meta || !extractLyrics(meta));
+                const needsImage = dlImage && (!meta || !extractImageUrl(meta));
+                if (needsLyrics || needsImage) {
+                    const directMeta = await fetchClipMeta(clip.id, token, tab.id);
+                    if (directMeta) meta = { ...(meta || {}), ...directMeta, title: title || directMeta.title };
                 }
                 if (!meta) log('⚠️ Metadata not found: ' + title);
             }
