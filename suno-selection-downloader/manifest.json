@@ -3,7 +3,7 @@
   "name": "Suno Selection Downloader",
   "short_name": "Suno Select DL",
   "description": "Collect selected Suno tracks in a side panel, then download WAV files with lyrics and covers in a 1-5 track queue.",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "action": {
     "default_icon": "icon.png",
     "default_title": "Suno Selection Downloader"

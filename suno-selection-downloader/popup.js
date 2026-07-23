@@ -49,6 +49,7 @@ let countdownRunning = false;
 let collecting = false;
 let collectTimer = null;
 let downloadedIds = new Set();
+let lastScannerDiagnostic = '';
 
 function log(text) { statusDiv.innerText = text + '\n' + statusDiv.innerText; }
 
@@ -136,7 +137,21 @@ function mergeClips(found) {
 
 async function scanVisible() {
     const sel = await api.runtime.sendMessage({ action: 'read_selection' });
-    return sel.clips || [];
+    const found = sel.clips || [];
+    const debug = sel?._debug;
+    if (!found.length && debug) {
+        const diagnostic =
+            'Scanner: ' + (debug.controls_found || 0) + ' controls, ' +
+            (debug.selected_controls_found || 0) + ' selected, ' +
+            (debug.selected_without_clip_id || 0) + ' without clip ID.';
+        if (diagnostic !== lastScannerDiagnostic) {
+            lastScannerDiagnostic = diagnostic;
+            log(diagnostic);
+        }
+    } else if (found.length) {
+        lastScannerDiagnostic = '';
+    }
+    return found;
 }
 
 async function scanSelection({ quiet = false } = {}) {
