@@ -97,12 +97,12 @@ async function waitForDownloadDone(id, timeoutMs = DOWNLOAD_WAIT_TIMEOUT_MS) {
     return { state: 'timeout' };
 }
 
-async function waitForBatch(ids) {
+async function waitForBatch(ids, quiet = false) {
     const clean = ids.filter(id => typeof id === 'number');
     for (const id of clean) {
         const done = await waitForDownloadDone(id);
-        if (done.state === 'interrupted') log(`⚠️ Chrome download interrupted: ${done.error || id}`);
-        if (done.state === 'timeout') log(`⚠️ Download wait timeout: ${id}`);
+        if (!quiet && done.state === 'interrupted') log(`⚠️ Chrome download interrupted: ${done.error || id}`);
+        if (!quiet && done.state === 'timeout') log(`⚠️ Download wait timeout: ${id}`);
         if (done.state === 'stopped') return;
     }
 }
@@ -497,12 +497,12 @@ ${lyrics}
             if (dlImage && meta) {
                 const imgUrl = extractImageUrl(meta);
                 if (imgUrl) {
-                    const ext = imageExt(imgUrl);
-                    const imgName = buildFilename(folder, `${sanitizeFilename(title)}_${short}_cover.${ext}`, isAndroid);
-                    const imgId = await downloadFile(imgUrl, imgName);
-                    await waitForBatch([imgId]);
-                } else {
-                    log('ℹ️ Cover not found: ' + title);
+                    try {
+                        const ext = imageExt(imgUrl);
+                        const imgName = buildFilename(folder, `${sanitizeFilename(title)}_${short}_cover.${ext}`, isAndroid);
+                        const imgId = await downloadFile(imgUrl, imgName);
+                        await waitForBatch([imgId], true);
+                    } catch (e) {}
                 }
             }
 
